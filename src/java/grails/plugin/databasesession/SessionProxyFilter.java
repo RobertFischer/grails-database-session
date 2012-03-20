@@ -137,11 +137,11 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 		Cookie cookie = getCookie(request);
 		if (cookie == null) {
 			cookie = newCookie(sessionId, request);
-			log.debug("Created new session cookie {}", sessionId);
+			log.debug("Created new session cookie " + sessionId);
 		}
 		else {
 			log.debug("Updating existing cookie with id {} to new value {}", cookie.getValue(), sessionId);
-			cookie.setValue(sessionId);
+			cookie = newCookie(sessionId, request);
 		}
 		response.addCookie(cookie);
 	}
@@ -164,7 +164,7 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 		cookie = newCookie(cookie.getValue(), request);
 		cookie.setMaxAge(0);
 		response.addCookie(cookie);
-		log.debug("Deleted cookie with id {}", cookie.getValue());
+		log.debug("Deleted cookie with id " + cookie.getValue());
 	}
 
 	/**
@@ -179,9 +179,11 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 		return persister;
 	}
 
+/*
 	@Override
 	public void afterPropertiesSet() throws ServletException {
 		super.afterPropertiesSet();
 		Assert.notNull(persister, "persister must be specified");
 	}
+*/
 }
