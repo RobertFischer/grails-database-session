@@ -8,5 +8,11 @@ grails.project.dependency.resolution = {
 
 	repositories {
 		grailsCentral()
+		mavenLocal()
+		mavenCentral()
 	}
+	dependencies {
+		compile 'com.google.guava:guava:12.0'
+	}
+
 }

@@ -5,17 +5,18 @@ import grails.util.Metadata
 import org.springframework.web.filter.DelegatingFilterProxy
 
 class DatabaseSessionGrailsPlugin {
-	String version = '1.1.2'
+	String version = '1.2.0'
 	String grailsVersion = '1.3.3 > *'
 	String title = 'Database Session Plugin'
-	String author = 'Burt Beckwith'
-	String authorEmail = 'beckwithb@vmware.com'
+	String author = 'Robert Fischer'
+	String authorEmail = 'robert.fischer@smokejumperit.com'
+	def developers = [ [ name: "Burt Beckwith", email: "beckwithb@vmware.com" ]]
 	String description = 'Stores HTTP sessions in a database'
 	String documentation = 'http://grails.org/plugin/database-session'
 
 	String license = 'APACHE'
 	def issueManagement = [system: 'JIRA', url: 'http://jira.grails.org/browse/GPDATABASESESSION']
-	def scm = [url: 'https://github.com/burtbeckwith/grails-database-session']
+	def scm = [url: 'https://github.com/RobertFischer/grails-database-session']
 
 	def getWebXmlFilterOrder() {
 		// make sure the filter is first

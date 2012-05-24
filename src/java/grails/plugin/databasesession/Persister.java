@@ -1,92 +1,46 @@
 package grails.plugin.databasesession;
 
+import java.io.Serializable;
+
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author Burt Beckwith
+ * @author Robert Fischer
  */
 public interface Persister {
 
 	/**
-	 * Retrieve an attribute value.
-	 * @param sessionId the session id
-	 * @param name the attribute name
-	 * @return the value or null
-	 * @throws InvalidatedSessionException
-	 */
-	Object getAttribute(String sessionId, String name) throws InvalidatedSessionException;
+	* Persists a session to the data store. The map on {@link SessionData#attrs} may be {@code null}, in which case it is treated as 
+	* equivalent to an empty map; to delete a session, use {@link #invalidate(String)}.
+	*/
+	void persistSession(SessionData session);
 
 	/**
-	 * Store an attribute value.
-	 * @param sessionId the session id
-	 * @param name the attribute name
-	 * @param value the value
-	 * @throws InvalidatedSessionException
-	 */
-	void setAttribute(String sessionId, String name, Object value) throws InvalidatedSessionException;
+	* Retrieves the session data for the given session. Will never be {@code null}, but may be empty. Note that an empty map
+	* may reflect an invalid session: check {@link #isValid(String)} for that.
+	*/
+	SessionData getSessionData(String sessionId);
 
 	/**
-	 * Delete a persistent attribute value.
-	 * @param sessionId the session id
-	 * @param name the attribute name
-	 * @throws InvalidatedSessionException
-	 */
-	void removeAttribute(String sessionId, String name) throws InvalidatedSessionException;
-
-	/**
-	 * Get all attribute names for the session.
-	 * @param sessionId the session id
-	 * @return the names (never null, may be empty)
-	 * @throws InvalidatedSessionException
-	 */
-	List<String> getAttributeNames(String sessionId) throws InvalidatedSessionException;
-
-	/**
-	 * Delete a session and its attributes.
+	 * Delete a session and its attributes. 
+   * 
 	 * @param sessionId the session id
 	 */
 	void invalidate(String sessionId);
 
 	/**
-	 * Register a new persistent session.
-	 * @param sessionId the session id
-	 */
-	void create(String sessionId);
-
-	/**
-	 * Get the last access time.
-	 * @param sessionId the session id
-	 * @return the time
-	 * @throws InvalidatedSessionException
-	 */
-	long getLastAccessedTime(String sessionId) throws InvalidatedSessionException;
-
-	/**
-    * Set the maximum time interval, in seconds, between client requests
-    * before the servlet container will invalidate the session.  A negative
-    * time indicates that the session should never time out.
-    *
-	 * @param sessionId the session id
-	 * @param interval the interval seconds
-	 * @throws InvalidatedSessionException
-	 */
-	void setMaxInactiveInterval(String sessionId, int interval) throws InvalidatedSessionException;
-
-	/**
-    * Set the maximum time interval, in seconds, between client requests
-    * before the servlet container will invalidate the session.  A negative
-    * time indicates that the session should never time out.
-    *
-	 * @param sessionId the session id
-	 * @return the interval seconds
-	 * @throws InvalidatedSessionException
-	 */
-	int getMaxInactiveInterval(String sessionId) throws InvalidatedSessionException;
-
-	/**
 	 * Check if the session is valid.
+		* 
 	 * @param sessionId the session id
 	 * @return true if the session exists and hasn't been invalidated
 	 */
 	boolean isValid(String sessionId);
+
+	/**
+	* Provides the valid session ids that are stored within this persister.
+	*/
+	Iterator<String> getSessionIds();
+
 }
