@@ -83,11 +83,11 @@ public class ChainPersister {
 	* Persists a session to each of the underlying {@link Persister}s. The sessionData may be {@code null}.
 	* The persistance is done concurrently using the executor.
 	*/
-	public void persistSession(final String sessionId, final SessionData sessionData) {
+	public void persistSession(final SessionData sessionData) {
 		for(final Persister p : persisters) {
 			executor.submit(new Runnable() {
 				public void run() {
-					p.persistSession(sessionId, sessionData);
+					p.persistSession(sessionData);
 				}
 			});
 		}
@@ -101,80 +101,63 @@ public class ChainPersister {
 		});
 	}
 
+	private SessionData waitOnSessionData(Future<SessionData> future, Future<SessionData>... others) throws InterruptedException {
+		try {
+			return future.get(getSecondsToWait(), TimeUnit.SECONDS);
+		} catch(InterruptedException i) {
+			log.warn("Interrupted while waiting on " + future);
+			future.cancel(true);
+			for(Future<SessionData> other : others) {
+				other.cancel(true);
+			}
+			throw i;
+		} catch(java.util.concurrent.ExecutionException ee) {
+			log.warn("Exception while trying to get session data (" + future + ")", ee);
+		} catch(java.util.concurrent.TimeoutException te) {
+			log.warn("Timeout while trying to get session data (" + future + ")");
+			future.cancel(true);
+		} catch(java.util.concurrent.CancellationException ce) {
+			log.warn("Encountered a cancelled fetch of session data (" + future + ")");
+		}
+		return null;
+	}
+
 	/**
 	* Retrieves the session data from the first possible {@link Persister} containing it. May be {@code null}.
 	*/
 	public SessionData getSessionData(final String sessionId) {
 		SessionData session = null;
+		
+		try {
 
-		final Iterator<Persister> it = persisters.iterator();
+			final Iterator<Persister> it = persisters.iterator();
 
-		if(!it.hasNext()) return null;
+			if(!it.hasNext()) return null;
 
-		// Kick off the first couple of fetch attempts
-		Future<SessionData> next = createFetchDataFuture(it.next(), sessionId);
-		Future<SessionData> nextNext = 
-			it.hasNext() ? createFetchDataFuture(it.next(), sessionId) : null;
+			// Kick off the first couple of fetch attempts
+			Future<SessionData> next = createFetchDataFuture(it.next(), sessionId);
+			Future<SessionData> nextNext = 
+				it.hasNext() ? createFetchDataFuture(it.next(), sessionId) : null;
 
-		do {
-			Future<SessionData> current = next;
-			next = nextNext;
-			nextNext = it.hasNext() ? createFetchDataFuture(it.next(), sessionId) : null;
+			do {
+				Future<SessionData> current = next;
+				next = nextNext;
+				nextNext = it.hasNext() ? createFetchDataFuture(it.next(), sessionId) : null;
 
-			try {
-				session = current.get(getSecondsToWait(), TimeUnit.SECONDS);
-			} catch(InterruptedException i) { 
-				current.cancel(true);
-				if(next != null) next.cancel(true);
-				if(nextNext != null) nextNext.cancel(true);
-				log.warn("Interrupted while waiting on " + current);
-				return session;
-			} catch(java.util.concurrent.ExecutionException ee) {
-				log.warn("Exception while trying to get session data (" + current + ")", ee);
-			} catch(java.util.concurrent.TimeoutException te) {
-				log.warn("Timeout while trying to get session data (" + current + ")", te);
-				current.cancel(true);
+				session = waitOnSessionData(current, next, nextNext);
+			} while(session == null && next != null);
+
+			if(next != null) {
+				if(session == null) session = waitOnSessionData(next, nextNext);
+				next.cancel(true);
 			}
-			
 
-		} while(session == null && next != null);
-
-		if(next != null) {
-			if(session == null) {
-				try {
-					session = next.get(getSecondsToWait(), TimeUnit.SECONDS);
-				} catch(InterruptedException i) { 
-					next.cancel(true);
-					if(nextNext != null) nextNext.cancel(true);
-					log.warn("Interrupted while waiting on " + next);
-					return session;
-				} catch(java.util.concurrent.ExecutionException ee) {
-					log.warn("Exception while trying to get session data (" + next + ")", ee);
-				} catch(java.util.concurrent.TimeoutException te) {
-					log.warn("Timeout while trying to get session data (" + next + ")", te);
-					next.cancel(true);
-				}
+			if(nextNext != null) {
+				if(session == null) session = waitOnSessionData(nextNext);
+				nextNext.cancel(true);
 			}
-			next.cancel(true);
-		}
 
-		if(nextNext != null) {
-			if(session == null) {
-				try {
-					session = nextNext.get(getSecondsToWait(), TimeUnit.SECONDS);
-				} catch(InterruptedException i) { 
-					next.cancel(true); nextNext.cancel(true);
-					log.warn("Interrupted while waiting on " + nextNext);
-					return session;
-				} catch(java.util.concurrent.ExecutionException ee) {
-					log.warn("Exception while trying to get session data (" + nextNext + ")", ee);
-				} catch(java.util.concurrent.TimeoutException te) {
-					log.warn("Timeout while trying to get session data (" + nextNext + ")", te);
-					nextNext.cancel(true);
-				}
-			}
-			nextNext.cancel(true);
-		}
+		} catch(InterruptedException ignored) {}
 
 		return session;
 	}

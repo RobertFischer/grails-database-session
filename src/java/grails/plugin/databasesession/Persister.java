@@ -2,6 +2,7 @@ package grails.plugin.databasesession;
 
 import java.io.Serializable;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -37,10 +38,5 @@ public interface Persister {
 	 * @return true if the session exists and hasn't been invalidated
 	 */
 	boolean isValid(String sessionId);
-
-	/**
-	* Provides the valid session ids that are stored within this persister.
-	*/
-	Iterator<String> getSessionIds();
 
 }

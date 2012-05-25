@@ -7,6 +7,8 @@ import java.sql.*;
 import java.security.MessageDigest;
 import java.security.DigestOutputStream;
 
+import org.apache.commons.io.IOUtils;
+
 import org.apache.log4j.Logger;
 
 import org.springframework.dao.*;
@@ -94,7 +96,11 @@ public class JdbcPersister implements Persister {
 	}
 
 	private static MessageDigest getMessageDigest() {
-		return MessageDigest.getInstance("SHA-256");
+		try {
+			return MessageDigest.getInstance("SHA-256");
+		} catch(java.security.NoSuchAlgorithmException nsae) {
+			throw new RuntimeException("Could not find SHA-256 on your virtual machine, even though it is required to be there!", nsae);	
+		}
 	}
 
 	private static final class SessionBytes {
@@ -112,12 +118,16 @@ public class JdbcPersister implements Persister {
 	}
 
 	private static SessionBytes sessionToBytes(SessionData session) {
-		final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		final DigestOutputStream dos = new DigestOutputStream(baos, getMessageDigest());
-		final ObjectOutputStream oos = new ObjectOutputStream(dos);
-		oos.writeObject(session);
-		oos.close();
-		return new SessionBytes(session, dos.getMessageDigest().digest(), new ByteArrayInputStream(baos.toByteArray()));
+		try {	
+			final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			final DigestOutputStream dos = new DigestOutputStream(baos, getMessageDigest());
+			final ObjectOutputStream oos = new ObjectOutputStream(dos);
+			oos.writeObject(new HashMap<String,Serializable>(session.attrs));
+			oos.close();
+			return new SessionBytes(session, dos.getMessageDigest().digest(), new ByteArrayInputStream(baos.toByteArray()));
+		} catch(java.io.IOException ioe) {
+			throw new RuntimeException("IO Exception while converting the session to bytes: cannot serialize!", ioe);
+		}
 	}
 
 	/**
@@ -125,7 +135,7 @@ public class JdbcPersister implements Persister {
 	*/
 	public void persistSession(SessionData session) {
 		final SessionBytes data = sessionToBytes(session);
-		if(session.isNew()) {
+		if(session.isNew) {
 			insertSession(data);
 		} else {
 			updateSession(data);
@@ -135,13 +145,13 @@ public class JdbcPersister implements Persister {
 	private void insertSession(final SessionBytes data) {
 		final String timestamp = getCurrentTimestampDbFunction();
 		
-		final List<Object> arguments = new ArrayList<>(6);
+		final List<Object> arguments = new ArrayList<Object>(6);
 		arguments.add(data.session.sessionId);
 		arguments.add(new SqlParameterValue(Types.BLOB, data.byteStream));
 		arguments.add(data.hash);
 		arguments.add(data.session.maxInactiveInterval);
 		if("?".equals(timestamp)) {
-			final Date now = new Date();
+			final java.util.Date now = new java.util.Date();
 			arguments.add(now);
 			arguments.add(now);
 		}
@@ -150,16 +160,16 @@ public class JdbcPersister implements Persister {
 			"INSERT " + getTableName() + 
 				" (sessionId, sessionData, sessionHash, maxInactiveInterval, createdAt    , lastAccessedAt) VALUES " +
 				" (?        , ?          , ?          , ?                  , "+timestamp+","+timestamp+  ")",
-			arguments.toArrayList(new Object[0])
+			arguments.toArray(new Object[0])
 		);
 	}
 
 	private void updateSession(SessionBytes data) {
-		final List<Object> arguments = new ArrayList<>(6);
+		final List<Object> arguments = new ArrayList<Object>(6);
 		arguments.add(new SqlParameterValue(Types.BLOB, data.byteStream));
 		arguments.add(data.hash);
-		arguments.add(new Date(data.session.lastAccessedAt));
-		arguments.add(new Date(data.session.maxInactiveInterval));
+		arguments.add(new java.sql.Date(data.session.lastAccessedAt));
+		arguments.add(new java.sql.Date(data.session.maxInactiveInterval));
 		arguments.add(data.session.sessionId);
 		arguments.add(data.hash);
 
@@ -188,7 +198,7 @@ public class JdbcPersister implements Persister {
 							readAttributes(rs.getBinaryStream(2)),
 							rs.getDate(3).getTime(),
 							rs.getDate(4).getTime(),
-							rs.getInt(5)
+							rs.getInt(5), false
 						);
 					}
 				}
@@ -210,8 +220,12 @@ public class JdbcPersister implements Persister {
 		}
 		try {
 			return (Map<String,Serializable>)(new ObjectInputStream(new BufferedInputStream(is)).readObject());
+		} catch(java.lang.ClassNotFoundException cnfe) {
+			throw new RuntimeException("Could not find the class to deserialize the session", cnfe);
+		} catch(java.io.IOException ioe) {
+			throw new RuntimeException("I/O Exception while reading session from database", ioe);
 		} finally {
-			is.close();
+			IOUtils.closeQuietly(is);
 		}
 	}
 
@@ -230,6 +244,14 @@ public class JdbcPersister implements Persister {
 	 */
 	public boolean isValid(String sessionId) {
 		return 1 == jdbcTemplate.queryForInt("SELECT COUNT(*) FROM " + getTableName() + " WHERE sessionId = ?", sessionId);
+	}
+
+  /**
+  * Provides the valid session ids that are stored within this persister.
+  */
+  public Iterator<String> getSessionIds() {
+		List<String> ids = jdbcTemplate.queryForList("SELECT sessionId FROM " + getTableName(), String.class, new Object[0]);
+		return ids.iterator();
 	}
 
 }

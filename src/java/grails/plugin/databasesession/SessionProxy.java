@@ -1,5 +1,8 @@
 package grails.plugin.databasesession;
 
+import java.io.Serializable;
+
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -12,10 +15,12 @@ import javax.servlet.ServletContext;
 import javax.servlet.http.HttpSession;
 import javax.servlet.http.HttpSessionEvent;
 import javax.servlet.http.HttpSessionContext;
+import javax.servlet.http.HttpSessionBindingEvent; 
 import javax.servlet.http.HttpSessionBindingListener; 
 import javax.servlet.http.HttpSessionActivationListener; 
 
 import com.google.common.collect.ForwardingMap;
+import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Iterators;
 
 /**
@@ -23,18 +28,18 @@ import com.google.common.collect.Iterators;
  * @author Robert Fischer
  */
 @SuppressWarnings("deprecation")
-public class SessionProxy implements HttpSession {
+public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	private final Persister _persister;
 	private final String _sessionId;
 	private final ServletContext _servletContext;
-	private final Map<String,Serializable> attrs;
+	private final Map<String,Serializable> _attrs;
 	private final boolean _isNew;
 	private final long _createdAt;
-	private final HttpSessionEvent sessionEvent = new HttpSessionEvent(this); // Might as well cache this
+	private final HttpSessionEvent event = new HttpSessionEvent(this); // Might as well cache this
 	private volatile long _lastAccessedAt;
 	private volatile boolean _invalidated;
-	private volatile long _maxInactiveInterval;
+	private volatile int _maxInactiveInterval;
 	
 
 	/**
@@ -63,9 +68,7 @@ public class SessionProxy implements HttpSession {
 	* Mapping back to the {@link SessionData} holder.
 	*/
 	public SessionData toData() {
-		return new SessionData(
-			_sessionId, _attrs, _createdAt, _lastAccessedAt, _maxInactiveInterval, _isNew
-		);
+		return SessionData.fromProxy(this);
 	}
 
 	public void fireSessionActivationListeners() {
@@ -92,7 +95,7 @@ public class SessionProxy implements HttpSession {
 		if(lastAccess + (_maxInactiveInterval*1000L) < System.currentTimeMillis()) {
 			invalidate();
 			throw new IllegalStateException(
-				"Session " + _sessionId + " (last accessed at " + new Date(lastAccess) + ") is invalid due to age"
+				"Session " + _sessionId + " (last accessed at " + new java.sql.Date(lastAccess) + ") is invalid due to age"
 			);
 		}
 		_lastAccessedAt = System.currentTimeMillis();
@@ -112,7 +115,7 @@ public class SessionProxy implements HttpSession {
 	@Override
 	public Enumeration<String> getAttributeNames() {
 		checkAccess();
-		return Iterators.asEnumeration(_attrs.keySet());
+		return Collections.enumeration(_attrs.keySet());
 	}
 
 	@Override @Deprecated
@@ -130,18 +133,18 @@ public class SessionProxy implements HttpSession {
 		} else {
 			final Serializable oldValue;
 			try {
-				oldValue = put(name, (Serializable)value);
+				oldValue = _attrs.put(name, (Serializable)value);
 			} catch(ClassCastException cce) {
 				throw new IllegalStateException("Can only set Serializable values into the session (tried to add: " + value.getClass() + ")");
 			}
 			if(oldValue != null && oldValue instanceof HttpSessionBindingListener) {
 				((HttpSessionBindingListener)oldValue).valueUnbound(
-					new HttpSessionBindingEvent(this, name, oldValue);
+					new HttpSessionBindingEvent(this, name, oldValue)
 				);
 			}
 			if(value instanceof HttpSessionBindingListener) {
 				((HttpSessionBindingListener)value).valueBound(
-					new HttpSessionBindingEvent(this, name, value);
+					new HttpSessionBindingEvent(this, name, value)
 				);
 			}
 		}
@@ -155,10 +158,10 @@ public class SessionProxy implements HttpSession {
 	@Override
 	public void removeAttribute(String name) {
 		checkAccess();
-		Serializable value = remove(name);
+		Serializable value = _attrs.remove(name);
 		if(value != null && value instanceof HttpSessionBindingListener) {
 			((HttpSessionBindingListener)value).valueUnbound(
-				new HttpSessionBindingEvent(this, name, value);
+				new HttpSessionBindingEvent(this, name, value)
 			);
 		}
 		return;
@@ -201,14 +204,18 @@ public class SessionProxy implements HttpSession {
 		return _maxInactiveInterval;
 	}
 
+	/**
+	* Due to security concerns, the returned {@link HttpSessionContext} simply returns {@code null} for all
+	* its method calls.
+	*/
 	@Override @Deprecated
 	public HttpSessionContext getSessionContext() {
 		return new HttpSessionContext() {
 			public HttpSession getSession(String sessionId) {
-				return new SessionProxy(_servletContext, _persister, sessionId);
+				return null;
 			}
 			public Enumeration<String> getIds() {
-				return Iterators.asEnumeration(_persister.getSessionIds());
+				return null;
 			}
 		};
 	}
@@ -225,6 +232,17 @@ public class SessionProxy implements HttpSession {
 	public boolean isNew() {
 		checkAccess();
 		return _isNew;
+	}
+
+	/**
+	* Gets an immutable map of all the attributes.
+	*/
+	public Map<String,Serializable> getAttributes() {
+		return ImmutableSortedMap.copyOf(_attrs);
+	}
+
+	public long getCreatedAt() {
+		return _createdAt;
 	}
 
 }
