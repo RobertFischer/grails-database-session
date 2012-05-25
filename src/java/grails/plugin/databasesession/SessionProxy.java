@@ -8,6 +8,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -50,19 +52,32 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	 * @param sessionId session id
 	 */
 	public SessionProxy(ServletContext servletContext, Persister persister, String sessionId) {
+		this(servletContext, persister, persister.getSessionData(sessionId));
+	}
+
+	public SessionProxy(final ServletContext servletContext, final Persister persister, final SessionData data) {
 		_servletContext = servletContext;
 		_persister = persister;
-		_sessionId = sessionId;
+		_invalidated = false;
 
-		_invalidated = persister.isValid(sessionId);
-
-		final SessionData data = persister.getSessionData(sessionId);
-		_attrs = new ConcurrentHashMap<String,Serializable>(data.attrs);
-		_createdAt = data.createdAt;
-		_lastAccessedAt = data.lastAccessedAt;
-		_isNew = data.isNew;
-		_maxInactiveInterval = data.maxInactiveInterval;
+		if(data == null) {
+			_sessionId = UUID.randomUUID().toString();
+			_attrs = new ConcurrentHashMap<String,Serializable>();
+			_createdAt = System.currentTimeMillis();
+			_lastAccessedAt = System.currentTimeMillis();
+			_isNew = true;
+			_maxInactiveInterval = 600;
+		} else {
+			_sessionId = data.sessionId;
+			_attrs = new ConcurrentHashMap<String,Serializable>(data.attrs);
+			_createdAt = data.createdAt;
+			_lastAccessedAt = data.lastAccessedAt;
+			_isNew = false;
+			_maxInactiveInterval = data.maxInactiveInterval;
+		}
 	}
+
+	
 
 	/**
 	* Mapping back to the {@link SessionData} holder.

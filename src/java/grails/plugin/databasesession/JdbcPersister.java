@@ -135,7 +135,7 @@ public class JdbcPersister implements Persister {
 	*/
 	public void persistSession(SessionData session) {
 		final SessionBytes data = sessionToBytes(session);
-		if(session.isNew) {
+		if(isValid(session.sessionId)) {
 			insertSession(data);
 		} else {
 			updateSession(data);
@@ -155,13 +155,18 @@ public class JdbcPersister implements Persister {
 			arguments.add(now);
 			arguments.add(now);
 		}
-	
-		jdbcTemplate.update(
-			"INSERT " + getTableName() + 
-				" (sessionId, sessionData, sessionHash, maxInactiveInterval, createdAt    , lastAccessedAt) VALUES " +
-				" (?        , ?          , ?          , ?                  , "+timestamp+","+timestamp+  ")",
-			arguments.toArray(new Object[0])
-		);
+
+		try {	
+			jdbcTemplate.update(
+				"INSERT " + getTableName() + 
+					" (sessionId, sessionData, sessionHash, maxInactiveInterval, createdAt    , lastAccessedAt) VALUES " +
+					" (?        , ?          , ?          , ?                  , "+timestamp+","+timestamp+  ")",
+				arguments.toArray(new Object[0])
+			);
+		} catch(DuplicateKeyException dke) {
+			// Someone else did an insert at the same time!
+			updateSession(data);
+		}
 	}
 
 	private void updateSession(SessionBytes data) {
@@ -179,7 +184,7 @@ public class JdbcPersister implements Persister {
 				" WHERE sessionId = ? AND sessionHash <> ?",
 			arguments.toArray(new Object[0])
 		);
-	}
+	} 
 
 	/**
 	* Retrieves the session data for the given session. May be {@code null}.
@@ -198,7 +203,7 @@ public class JdbcPersister implements Persister {
 							readAttributes(rs.getBinaryStream(2)),
 							rs.getDate(3).getTime(),
 							rs.getDate(4).getTime(),
-							rs.getInt(5), false
+							rs.getInt(5)
 						);
 					}
 				}

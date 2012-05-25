@@ -2,6 +2,7 @@ package grails.plugin.databasesession;
 
 import java.io.Serializable;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.log4j.Logger;
 
+import com.google.common.util.concurrent.MoreExecutors;
+
 /**
  * A {@link Persister} that attempts a series of persistance strategies in order. 
  *
@@ -22,14 +25,17 @@ import org.apache.log4j.Logger;
  */
 public class ChainPersister {
 
-	private static final Logger log = Logger.getLogger(ChainPersister.class);
+	private final Logger log = Logger.getLogger(getClass());
 
-	private final List<Persister> persisters = new CopyOnWriteArrayList();
+	private List<Persister> persisters = new CopyOnWriteArrayList();
 
+	/**
+	* The executor that will be used to get some concurrency out of this chain. 
+	* If you want to execute things serially (no concurrency), use {@link MoreExecutors#sameThreadExecutor()}.
+	*/
 	private volatile ExecutorService executor = Executors.newCachedThreadPool();
 
-	// longs can have some funky concurrency semantics on 32 bit archietctures, even
-	// when marked as volatile.
+	// long store/get operations are guarantied to be atomic on volatile fields
 	private volatile int secondsToWait = 20;
 
 	/**
@@ -61,6 +67,15 @@ public class ChainPersister {
 	*/
 	public ExecutorService getExecutor() {
 		return executor;	
+	}
+
+	public List<Persister> getPersisters() {
+		return new ArrayList<Persister>(persisters);
+	}
+
+	public void setPersisters(List<Persister> persisters) {
+		if(persisters == null) throw new IllegalArgumentException("Cannot assign a null persisters property");
+		this.persisters = new CopyOnWriteArrayList<Persister>(persisters);
 	}
 
 	/**
@@ -157,7 +172,7 @@ public class ChainPersister {
 				nextNext.cancel(true);
 			}
 
-		} catch(InterruptedException ignored) {}
+		} catch(InterruptedException punt) {}
 
 		return session;
 	}

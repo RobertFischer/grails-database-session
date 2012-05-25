@@ -24,9 +24,10 @@ public class SessionData {
 	public final long createdAt;
 	public final long lastAccessedAt;
 	public final int maxInactiveInterval; // In seconds
-	public final boolean isNew; 
 
 	public static SessionData fromSession(HttpSession session) {
+		if(session instanceof SessionProxy) return fromProxy((SessionProxy)session);
+	
 		ImmutableSortedMap.Builder<String,Serializable> builder = ImmutableSortedMap.builder();
 		
 		for(String name : Collections.list(session.getAttributeNames())) {
@@ -38,7 +39,7 @@ public class SessionData {
 		return new SessionData(
 			session.getId(), attrs,
 			session.getCreationTime(), session.getLastAccessedTime(),
-			session.getMaxInactiveInterval(), session.isNew()
+			session.getMaxInactiveInterval()
 		);
 	}
 
@@ -46,14 +47,14 @@ public class SessionData {
 		return new SessionData(
 			proxy.getId(), ImmutableSortedMap.copyOf(proxy.getAttributes()),
 			proxy.getCreationTime(), proxy.getLastAccessedTime(),
-			proxy.getMaxInactiveInterval(), proxy.isNew()
+			proxy.getMaxInactiveInterval()
 		);
 	}
 
 	public SessionData(
 		final String sessionId, final Map<String,Serializable> attrs,
 		final long createdAt, final long lastAccessedAt,
-		final int maxInactiveInterval, final boolean isNew
+		final int maxInactiveInterval
 	) {
 		this.sessionId = sessionId;
 		if(attrs == null || attrs.isEmpty()) {
@@ -64,7 +65,6 @@ public class SessionData {
 		this.createdAt = createdAt;
 		this.lastAccessedAt = lastAccessedAt;
 		this.maxInactiveInterval = maxInactiveInterval;
-		this.isNew = isNew;
 	}
 
 	public String toString() {

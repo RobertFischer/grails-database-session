@@ -1,8 +1,9 @@
-import grails.plugin.databasesession.SessionProxyFilter
+import grails.plugin.databasesession.*
 import grails.util.Environment
 import grails.util.Metadata
 
 import org.springframework.web.filter.DelegatingFilterProxy
+import org.springframework.jdbc.core.JdbcTemplate
 
 class DatabaseSessionGrailsPlugin {
 	String version = '1.2.0'
@@ -61,8 +62,22 @@ class DatabaseSessionGrailsPlugin {
 				'The database-session plugin requires that the webxml plugin be installed')
 		}
 
+		persisterJdbcTemplate(JdbcTemplate) { bean ->
+			bean.autowire = true
+		}
+
+		inMemoryPersister(InMemoryPersister)
+
+		jdbcPersister(JdbcPersister) {
+			jdbcTemplate = ref('persisterJdbcTemplate')
+		}
+
+		sessionPersister(ChainPersister) {
+			persisters = [ref('inMemoryPersister'), ref('jdbcPersister')]
+		}
+
 		sessionProxyFilter(SessionProxyFilter) {
-			persister = ref('gormPersisterService')
+			persister = ref('sessionPersister')
 		}
 	}
 

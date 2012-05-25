@@ -2,6 +2,7 @@ package grails.plugin.databasesession;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -21,6 +22,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * database-backed implementation.
  *
  * @author Burt Beckwith
+ * @author Robert Fischer
  */
 public class SessionProxyFilter extends OncePerRequestFilter {
 
@@ -34,75 +36,52 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(final HttpServletRequest request,
 			final HttpServletResponse response, final FilterChain chain)
 					throws ServletException, IOException {
+		log.debug("Executing the SessionProxyFilter");
 
-		HttpServletRequestWrapper requestWrapper = new HttpServletRequestWrapper(request) {
+		final HttpServletRequest requestForChain;
 
-			@Override
-			public HttpSession getSession(boolean create) {
-				return proxySession(create, request, response);
-			}
+		final String sessionId = getCookieValue(request);
+		if(sessionId == null) {
+			// Since there's no sessionId to use, just let the normal session stuff play out
+			log.debug("No cookie for presisted session found");
+			createCookie(request.getSession(true).getId(), request, response);
+			requestForChain = request;
+		} else {
+			log.debug("Session cookie {} found", sessionId);
 
-			@Override
-			public HttpSession getSession() {
-				return getSession(true);
-			}
-		};
+			// Since we have a sessionId, we need to wrap the request to return the proxy session
+			requestForChain = new HttpServletRequestWrapper(request) {
 
-		chain.doFilter(requestWrapper, response);
+				private SessionProxy session = null;
+
+				/**
+				* Provides the session. We don't bother checking the argument ({@code create}) because we know that we have
+				* a session in existence as is.
+				*/
+				@Override
+				public HttpSession getSession(boolean ignored) {
+					synchronized(this) {
+						if(session == null) session = proxySession(sessionId, request, response);
+					}
+					return session;
+				}
+
+				@Override
+				public HttpSession getSession() {
+					return getSession(true);
+				}
+			};
+
+			chain.doFilter(requestForChain, response);
+		}
 	}
 
-	protected HttpSession proxySession(final boolean create, final HttpServletRequest request,
+	protected SessionProxy proxySession(final String sessionId, final HttpServletRequest request,
 			final HttpServletResponse response) {
-
-		if (log.isDebugEnabled()) {
-			log.debug("Proxying request for {}", request.getRequestURL());
-		}
-
-		String sessionId = getCookieValue(request);
-		if (sessionId == null) {
-			if (!create) {
-				log.debug("No session cookie but create is false, not creating session");
-				// no session cookie but don't create
-				return null;
-			}
-
-			// no session cookie but do create
-			log.debug("No session cookie but create is true, creating session");
-			createSession(request, response);
-		}
-
-		if (persister.isValid(sessionId)) {
-			// session cookie and the session is still active
-			log.debug("Session cookie {} found", sessionId);
-			return new SessionProxy(getServletContext(), persister, sessionId);
-		}
-
-		if (!create) {
-			// session cookie but it's been invalidated or is too old, but don't create
-			log.debug("Session cookie {} found but invalid or old and create is false; not creating session", sessionId);
-			deleteCookie(request, response);
-			persister.invalidate(sessionId); // cleanup if it's too old
-			return null;
-		}
-
-		// session cookie but it's been invalidated or is too old
-		log.debug("Session cookie {} found but invalid or old and create is true, creating session", sessionId);
-		persister.invalidate(sessionId); // cleanup if it's too old
-		sessionId = createSession(request, response);
+		log.debug("Creating HttpSession proxy for request for " + request.getRequestURL());
 		return new SessionProxy(getServletContext(), persister, sessionId);
 	}
 
-	protected String createSession(final HttpServletRequest request, final HttpServletResponse response) {
-		String sessionId = generateSessionId();
-		persister.create(sessionId);
-		log.debug("Created new session {}", sessionId);
-		createCookie(sessionId, request, response);
-		return sessionId;
-	}
-
-	protected String generateSessionId() {
-		return UUID.randomUUID().toString();
-	}
 
 	protected Cookie getCookie(HttpServletRequest request) {
 		Cookie[] cookies = request.getCookies();
@@ -140,6 +119,7 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 		cookie.setDomain(request.getServerName()); // TODO needs config option
 		cookie.setPath("/");
 		cookie.setSecure(request.isSecure());
+		cookie.setMaxAge(60 * 24 * 2); // seconds
 		return cookie;
 	}
 

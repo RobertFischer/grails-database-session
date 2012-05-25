@@ -40,6 +40,7 @@ public class InMemoryPersister {
 	* How soon a session expires after its last access
 	*/
 	private volatile int expiresSeconds = 60;
+
 	/**
 	* How soon a session expires after its last access
 	*/

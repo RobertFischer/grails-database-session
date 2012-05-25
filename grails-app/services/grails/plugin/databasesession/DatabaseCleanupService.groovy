@@ -1,36 +1,29 @@
 package grails.plugin.databasesession
 
 /**
- * @author Burt Beckwith
+ * @author Robert Fischer
  */
 class DatabaseCleanupService {
 
-	def grailsApplication
+	def persisterJdbcTemplate
+	def jdbcPersister
 
 	/**
 	 * Delete PersistentSessions and corresponding PersistentSessionAttributes where
 	 * the last accessed time is older than a cutoff value.
 	 */
 	void cleanup() {
+		if(jdbcPersister) {
 
-		def conf = grailsApplication.config.grails.plugin.databasesession
-		float maxAge = (conf.cleanup.maxAge ?: 30) as Float
+			log.info("Cleaning up old database-persisted sessions");
 
-		long age = System.currentTimeMillis() - maxAge * 1000 * 60
+			int cleanedUpRows = persisterJdbcTemplate.update("""
+				DELETE FROM ${jdbcPersister.tableName} WHERE lastAccessedAt < 
+			""", (new Date()-1))
 
-		def ids = PersistentSession.findAllByLastAccessedOlderThan(age)
-		if (!ids) {
-			return
+			log.info("Done cleaning up: cleaned up $cleanedUpRows rows")
 		}
 
-		if (log.isDebugEnabled()) {
-			log.debug "using max age $maxAge minute(s), found old sessions to remove: $ids"
-		}
-
-		PersistentSessionAttributeValue.deleteBySessionIds ids
-
-		PersistentSessionAttribute.deleteBySessionIds ids
-
-		PersistentSession.deleteByIds ids
 	}
+
 }
