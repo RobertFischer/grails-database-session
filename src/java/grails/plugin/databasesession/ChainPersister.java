@@ -9,9 +9,11 @@ import java.util.Map;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.log4j.Logger;
@@ -23,7 +25,7 @@ import com.google.common.util.concurrent.MoreExecutors;
  *
  * @author Robert Fischer
  */
-public class ChainPersister {
+public class ChainPersister implements Persister {
 
 	private final Logger log = Logger.getLogger(getClass());
 
@@ -98,13 +100,30 @@ public class ChainPersister {
 	* Persists a session to each of the underlying {@link Persister}s. The sessionData may be {@code null}.
 	* The persistance is done concurrently using the executor.
 	*/
+	@Override
 	public void persistSession(final SessionData sessionData) {
+		log.debug("Persisting session " + sessionData + " to persister chain");
+		List<Future<?>> futures = new ArrayList<Future<?>>(persisters.size());
 		for(final Persister p : persisters) {
-			executor.submit(new Runnable() {
+			futures.add(executor.submit(new Runnable() {
 				public void run() {
+					log.debug("Persisting session " + sessionData + " to " + p);
 					p.persistSession(sessionData);
 				}
-			});
+			}));
+		}
+		try {
+			for(Future<?> f : futures) {
+				try{
+					f.get(getSecondsToWait(), TimeUnit.SECONDS);
+				} catch(ExecutionException ee) {
+					log.error("Error while persisting " + sessionData, ee.getCause());
+				} catch(TimeoutException te) {
+					log.warn("Timeout while persisting " + sessionData, te);
+				}
+			} 
+		} catch(InterruptedException punt) {
+			log.warn("Interrupted while persisting " + sessionData + ", so an exception may have been swallowed");
 		}
 	}
 
@@ -127,9 +146,9 @@ public class ChainPersister {
 			}
 			throw i;
 		} catch(java.util.concurrent.ExecutionException ee) {
-			log.warn("Exception while trying to get session data (" + future + ")", ee);
+			log.warn("Exception while trying to get session data (" + future + ")", ee.getCause());
 		} catch(java.util.concurrent.TimeoutException te) {
-			log.warn("Timeout while trying to get session data (" + future + ")");
+			log.warn("Timeout while trying to get session data (" + future + ")", te);
 			future.cancel(true);
 		} catch(java.util.concurrent.CancellationException ce) {
 			log.warn("Encountered a cancelled fetch of session data (" + future + ")");
@@ -140,6 +159,7 @@ public class ChainPersister {
 	/**
 	* Retrieves the session data from the first possible {@link Persister} containing it. May be {@code null}.
 	*/
+	@Override
 	public SessionData getSessionData(final String sessionId) {
 		SessionData session = null;
 		
@@ -172,22 +192,52 @@ public class ChainPersister {
 				nextNext.cancel(true);
 			}
 
-		} catch(InterruptedException punt) {}
+		} catch(InterruptedException punt) {
+			log.warn("Interrupted while getting session data: may not return data that is out there");
+		}
 
+
+		log.debug("Found session for session id " + sessionId + ": " + session);
 		return session;
 	}
 
 	/**
 	 * Informs all the {@link Persister} instances to invalidate this session.
 	 */
+	@Override
 	public void invalidate(final String sessionId) {
+		log.debug("Submitting invalidation call to persister chain for session " + sessionId);
+		List<Future<?>> futures = new ArrayList<Future<?>>(persisters.size());
 		for(final Persister p : persisters) {
-			executor.submit(new Runnable() {
+			futures.add(executor.submit(new Runnable() {
 				public void run() {
+					log.debug("Submitting invalidation call for session " + sessionId + " to persister " + p);
 					p.invalidate(sessionId);
 				}
-			});
+			}));
 		}
+		try {
+			for(Future<?> f : futures) {
+				try {
+					f.get(getSecondsToWait(), TimeUnit.SECONDS);
+				} catch(ExecutionException ee) {
+					log.error("Error while attempting to invalidate " + sessionId, ee.getCause());
+				} catch(TimeoutException te) {
+					log.warn("Timeout while attempting to invalidate " + sessionId, te);
+				}
+			}
+		} catch(InterruptedException punt) {
+			log.warn("Interrupted while invalidating sessions: a session may continue to exist");
+		} 
+	}
+
+	@Override
+	public boolean isValid(final String sessionId) {
+		for(Persister p : persisters) {
+			boolean isValid = p.isValid(sessionId);
+			if(isValid) return isValid;
+		}
+		return false;
 	}
 
 }

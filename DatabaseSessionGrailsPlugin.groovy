@@ -4,10 +4,12 @@ import grails.util.Metadata
 
 import org.springframework.web.filter.DelegatingFilterProxy
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.transaction.support.TransactionTemplate
+
 
 class DatabaseSessionGrailsPlugin {
 	String version = '1.2.0'
-	String grailsVersion = '1.3.3 > *'
+	String grailsVersion = '2.0.0 > *'
 	String title = 'Database Session Plugin'
 	String author = 'Robert Fischer'
 	String authorEmail = 'robert.fischer@smokejumperit.com'
@@ -62,23 +64,29 @@ class DatabaseSessionGrailsPlugin {
 				'The database-session plugin requires that the webxml plugin be installed')
 		}
 
-		persisterJdbcTemplate(JdbcTemplate) { bean ->
-			bean.autowire = true
-		}
+		sessionMemoryPersister(InMemoryPersister)
 
-		inMemoryPersister(InMemoryPersister)
-
-		jdbcPersister(JdbcPersister) {
-			jdbcTemplate = ref('persisterJdbcTemplate')
+		sessionJdbcMemoryPersister(JdbcPersister) {
+			transactionTemplate = { TransactionTemplate tmp ->
+				isolationLevelName = "ISOLATION_DEFAULT"
+				propagationBehaviorName = "PROPAGATION_NOT_SUPPORTED"
+				transactionManager = ref("transactionManager")
+			}
+			jdbcTemplate = { JdbcTemplate tmp -> 
+				dataSource = ref("dataSource")
+			}
 		}
 
 		sessionPersister(ChainPersister) {
-			persisters = [ref('inMemoryPersister'), ref('jdbcPersister')]
+			persisters = [ ref("sessionMemoryPersister"), ref("sessionJdbcMemoryPersister") ]				
 		}
 
 		sessionProxyFilter(SessionProxyFilter) {
 			persister = ref('sessionPersister')
 		}
+	}
+
+	def doWithApplicationContext = { appCtx ->
 	}
 
 	private boolean isEnabled(config) {

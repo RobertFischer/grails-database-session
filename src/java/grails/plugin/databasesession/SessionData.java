@@ -9,7 +9,7 @@ import java.util.SortedMap;
 
 import javax.servlet.http.HttpSession;
 
-import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 
 /**
@@ -20,7 +20,7 @@ import com.google.common.collect.Iterators;
 public class SessionData {
 
 	public final String sessionId;
-	public final SortedMap<String,Serializable> attrs;
+	public final Map<String,Serializable> attrs;
 	public final long createdAt;
 	public final long lastAccessedAt;
 	public final int maxInactiveInterval; // In seconds
@@ -28,12 +28,12 @@ public class SessionData {
 	public static SessionData fromSession(HttpSession session) {
 		if(session instanceof SessionProxy) return fromProxy((SessionProxy)session);
 	
-		ImmutableSortedMap.Builder<String,Serializable> builder = ImmutableSortedMap.builder();
+		ImmutableMap.Builder<String,Serializable> builder = ImmutableMap.builder();
 		
 		for(String name : Collections.list(session.getAttributeNames())) {
 			builder.put(name, (Serializable)session.getAttribute(name));
 		}
-		final ImmutableSortedMap<String,Serializable> attrs = builder.build();
+		final ImmutableMap<String,Serializable> attrs = builder.build();
 		builder = null;
 
 		return new SessionData(
@@ -45,7 +45,7 @@ public class SessionData {
 
 	public static SessionData fromProxy(SessionProxy proxy) {
 		return new SessionData(
-			proxy.getId(), ImmutableSortedMap.copyOf(proxy.getAttributes()),
+			proxy.getId(), ImmutableMap.copyOf(proxy.getAttributes()),
 			proxy.getCreationTime(), proxy.getLastAccessedTime(),
 			proxy.getMaxInactiveInterval()
 		);
@@ -58,9 +58,9 @@ public class SessionData {
 	) {
 		this.sessionId = sessionId;
 		if(attrs == null || attrs.isEmpty()) {
-			this.attrs = ImmutableSortedMap.of();
+			this.attrs = ImmutableMap.of();
 		} else {
-			this.attrs = ImmutableSortedMap.copyOf(attrs);
+			this.attrs = ImmutableMap.copyOf(attrs);
 		}
 		this.createdAt = createdAt;
 		this.lastAccessedAt = lastAccessedAt;

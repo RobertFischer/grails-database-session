@@ -1,7 +1,10 @@
 package grails.plugin.databasesession;
 
 import java.io.IOException;
+
 import java.util.UUID;
+
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.servlet.FilterChain;
@@ -30,7 +33,7 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 
 	private Persister persister;
 
-	private Logger log = LoggerFactory.getLogger(getClass());
+	private final Logger log = LoggerFactory.getLogger(getClass());
 
 	@Override
 	protected void doFilterInternal(final HttpServletRequest request,
@@ -47,7 +50,7 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 			createCookie(request.getSession(true).getId(), request, response);
 			requestForChain = request;
 		} else {
-			log.debug("Session cookie {} found", sessionId);
+			log.debug("Session cookie {} found: wrapping request with proxy session", sessionId);
 
 			// Since we have a sessionId, we need to wrap the request to return the proxy session
 			requestForChain = new HttpServletRequestWrapper(request) {
@@ -61,7 +64,10 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 				@Override
 				public HttpSession getSession(boolean ignored) {
 					synchronized(this) {
-						if(session == null) session = proxySession(sessionId, request, response);
+						if(session == null) {
+							log.debug("Generating proxy session for {}", sessionId);
+							session = proxySession(sessionId, request, response);
+						}
 					}
 					return session;
 				}
@@ -71,14 +77,14 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 					return getSession(true);
 				}
 			};
-
-			chain.doFilter(requestForChain, response);
 		}
+
+		chain.doFilter(requestForChain, response);
 	}
 
 	protected SessionProxy proxySession(final String sessionId, final HttpServletRequest request,
 			final HttpServletResponse response) {
-		log.debug("Creating HttpSession proxy for request for " + request.getRequestURL());
+		log.debug("Creating HttpSession proxy for request for {}", request.getRequestURL());
 		return new SessionProxy(getServletContext(), persister, sessionId);
 	}
 
@@ -116,10 +122,10 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 
 	protected Cookie newCookie(String sessionId, HttpServletRequest request) {
 		Cookie cookie = new Cookie(COOKIE_NAME, sessionId);
-		cookie.setDomain(request.getServerName()); // TODO needs config option
+		//cookie.setDomain(request.getServerName()); // TODO needs config option
 		cookie.setPath("/");
-		cookie.setSecure(request.isSecure());
-		cookie.setMaxAge(60 * 24 * 2); // seconds
+		cookie.setSecure(false); // TODO Should this be request.isSecure() or config option?
+		cookie.setMaxAge(-1); // Discard at browser close // TODO needs config option
 		return cookie;
 	}
 

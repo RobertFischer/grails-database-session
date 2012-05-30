@@ -7,14 +7,14 @@ grails.project.dependency.resolution = {
 	log 'warn'
 
 	repositories {
-		ebr()
-		grailsCentral()
 		mavenLocal()
 		mavenCentral()
+		grailsCentral()
+		ebr()
 	}
 	dependencies {
 		compile 'com.google.guava:guava:12.0'
-		compile 'commons-io:commons-io:2.3'
+		//compile 'commons-io:commons-io:2.3'
 	}
 
 }

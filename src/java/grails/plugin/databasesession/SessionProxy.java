@@ -25,6 +25,8 @@ import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Iterators;
 
+import org.apache.log4j.Logger;
+
 /**
  * @author Burt Beckwith
  * @author Robert Fischer
@@ -32,11 +34,12 @@ import com.google.common.collect.Iterators;
 @SuppressWarnings("deprecation")
 public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
+	private static final Logger log = Logger.getLogger(SessionProxy.class);
+
 	private final Persister _persister;
 	private final String _sessionId;
 	private final ServletContext _servletContext;
 	private final Map<String,Serializable> _attrs;
-	private final boolean _isNew;
 	private final long _createdAt;
 	private final HttpSessionEvent event = new HttpSessionEvent(this); // Might as well cache this
 	private volatile long _lastAccessedAt;
@@ -51,28 +54,28 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	 * @param persister the persister
 	 * @param sessionId session id
 	 */
-	public SessionProxy(ServletContext servletContext, Persister persister, String sessionId) {
-		this(servletContext, persister, persister.getSessionData(sessionId));
+	public SessionProxy(ServletContext servletContext, Persister persister, final String sessionId) {
+		this(servletContext, persister, sessionId, persister.getSessionData(sessionId));
+		log.debug("Constructed session for " + sessionId);
 	}
 
-	public SessionProxy(final ServletContext servletContext, final Persister persister, final SessionData data) {
+	public SessionProxy(final ServletContext servletContext, final Persister persister, final String sessionId, final SessionData data) {
 		_servletContext = servletContext;
 		_persister = persister;
 		_invalidated = false;
+		_sessionId = sessionId;
 
 		if(data == null) {
-			_sessionId = UUID.randomUUID().toString();
+			log.debug("Creating a new session data for " + sessionId);
 			_attrs = new ConcurrentHashMap<String,Serializable>();
 			_createdAt = System.currentTimeMillis();
 			_lastAccessedAt = System.currentTimeMillis();
-			_isNew = true;
 			_maxInactiveInterval = 600;
 		} else {
-			_sessionId = data.sessionId;
+			log.debug("Using persisted session");
 			_attrs = new ConcurrentHashMap<String,Serializable>(data.attrs);
 			_createdAt = data.createdAt;
 			_lastAccessedAt = data.lastAccessedAt;
-			_isNew = false;
 			_maxInactiveInterval = data.maxInactiveInterval;
 		}
 	}
@@ -239,14 +242,17 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	public void invalidate() {
 		checkAccess();
 		_invalidated = true;
-		// A race condition *could* result in a session being invalidated twice
+		// A race condition *could* result in a session being invalidated twice, but that's OK
 		_persister.invalidate(_sessionId); 
 	}
-	
+
+	/**
+	* Since we use the built-in session for the first round, this can always be {@code false}.
+	*/	
 	@Override
 	public boolean isNew() {
 		checkAccess();
-		return _isNew;
+		return false;
 	}
 
 	/**
