@@ -97,7 +97,7 @@ public class InMemoryPersister implements Persister, InitializingBean {
 	@Override
 	public SessionData getSessionData(String sessionId) {
 		SessionData result = cache.getIfPresent(sessionId);
-		log.debug("Retrieving session data" + sessionId + ": " + result);
+		log.debug("Retrieving session data " + sessionId + ": " + result);
 		return result;
 	}
 

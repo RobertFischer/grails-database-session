@@ -96,7 +96,8 @@ log4j = {
     info	'org.codehaus.groovy.grails.web.mapping',  // URL mapping
 					'grails.app', 'test2', 'test1'
 
-		debug 'grails.plugin.databasesession', 'grails.app.filter'
+		debug 'grails.plugin.databasesession', 'grails.app.filter', 'org.springframework.jdbc.core.JdbcTemplate', 'org.springframework.transaction',
+					'org.springframework.jdbc'
  
 		root {
 			error 'stdout'

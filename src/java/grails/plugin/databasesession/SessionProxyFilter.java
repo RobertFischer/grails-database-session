@@ -55,7 +55,7 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 			// Since we have a sessionId, we need to wrap the request to return the proxy session
 			requestForChain = new HttpServletRequestWrapper(request) {
 
-				private SessionProxy session = null;
+				private volatile SessionProxy session = null;
 
 				/**
 				* Provides the session. We don't bother checking the argument ({@code create}) because we know that we have
@@ -63,13 +63,16 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 				*/
 				@Override
 				public HttpSession getSession(boolean ignored) {
-					synchronized(this) {
+					try {
 						if(session == null) {
-							log.debug("Generating proxy session for {}", sessionId);
 							session = proxySession(sessionId, request, response);
+							log.debug("Generated proxy session for {}: {}", sessionId, session);
 						}
+						return session;
+					} catch(RuntimeException re) {
+						log.error("Error getting session for " + sessionId, re);
+						throw re;
 					}
-					return session;
 				}
 
 				@Override
@@ -79,6 +82,7 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 			};
 		}
 
+		log.debug("Passing off to the next filter in the chain: " + requestForChain + " " + chain);
 		chain.doFilter(requestForChain, response);
 	}
 

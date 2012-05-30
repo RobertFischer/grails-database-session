@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -29,7 +30,7 @@ public class ChainPersister implements Persister {
 
 	private final Logger log = Logger.getLogger(getClass());
 
-	private List<Persister> persisters = new CopyOnWriteArrayList();
+	private volatile List<Persister> persisters = new CopyOnWriteArrayList();
 
 	/**
 	* The executor that will be used to get some concurrency out of this chain. 
@@ -37,7 +38,6 @@ public class ChainPersister implements Persister {
 	*/
 	private volatile ExecutorService executor = Executors.newCachedThreadPool();
 
-	// long store/get operations are guarantied to be atomic on volatile fields
 	private volatile int secondsToWait = 20;
 
 	/**
@@ -97,33 +97,61 @@ public class ChainPersister implements Persister {
 	}
 
 	/**
+	* Ensures the completion of the future in a seperate task, logging any kind of exception as a consequence.
+	*/
+	private void consumeFuture(final Future<?> future, final String description) {
+		log.debug("Submitting future " + future + " to " + description);
+		executor.submit(new Runnable() {
+			public void run() {	
+				try{
+					log.debug("Waiting on " + future + ", which is " + description);
+					future.get(getSecondsToWait(), TimeUnit.SECONDS);
+					log.debug("Successfully completed " + description);
+				} catch(CancellationException ce) {
+					log.debug("Discovered cancelled task " + description + ": ignoring");
+				} catch(ExecutionException ee) {
+					log.error("Error while " + description, ee.getCause());
+				} catch(TimeoutException te) {
+					log.info("Timeout while " + description);
+					consumeFuture(executor.submit(new Callable<Void>() {
+						public Void call() throws Exception {
+							try {
+								future.get(Math.max(1, getSecondsToWait() - 1), TimeUnit.SECONDS);
+							} catch(InterruptedException ie) {
+								log.warn("Second interruption while " + description + ": cancelling.");
+								future.cancel(false);
+							} catch(TimeoutException te) {
+								log.warn("Second timeout while " + description + ": cancelling.");
+								future.cancel(false);
+							} 
+							return null;
+						}
+					}), "trying " + description + " a second time.");
+				} catch(InterruptedException ie) {
+					log.info("Interrupted while " + description);
+				} catch(RuntimeException re) {
+					log.error("Unknown exception while " + description + ": " + re.getClass().getSimpleName() + " - " + re.getMessage(), re);
+				} finally {
+					log.debug("Done consuming future for " + description);
+				}
+			}
+		});
+		log.debug("Submitted future " + future + " to " + description);
+	}
+
+	/**
 	* Persists a session to each of the underlying {@link Persister}s. The sessionData may be {@code null}.
 	* The persistance is done concurrently using the executor.
 	*/
 	@Override
 	public void persistSession(final SessionData sessionData) {
 		log.debug("Persisting session " + sessionData + " to persister chain");
-		List<Future<?>> futures = new ArrayList<Future<?>>(persisters.size());
 		for(final Persister p : persisters) {
-			futures.add(executor.submit(new Runnable() {
+			consumeFuture(executor.submit(new Runnable() {
 				public void run() {
-					log.debug("Persisting session " + sessionData + " to " + p);
 					p.persistSession(sessionData);
 				}
-			}));
-		}
-		try {
-			for(Future<?> f : futures) {
-				try{
-					f.get(getSecondsToWait(), TimeUnit.SECONDS);
-				} catch(ExecutionException ee) {
-					log.error("Error while persisting " + sessionData, ee.getCause());
-				} catch(TimeoutException te) {
-					log.warn("Timeout while persisting " + sessionData, te);
-				}
-			} 
-		} catch(InterruptedException punt) {
-			log.warn("Interrupted while persisting " + sessionData + ", so an exception may have been swallowed");
+			}), "persisting session " + sessionData + " to " + p);
 		}
 	}
 
@@ -137,22 +165,23 @@ public class ChainPersister implements Persister {
 
 	private SessionData waitOnSessionData(Future<SessionData> future, Future<SessionData>... others) throws InterruptedException {
 		try {
+			log.debug("Waiting on " + future + " to get the session data");
 			return future.get(getSecondsToWait(), TimeUnit.SECONDS);
 		} catch(InterruptedException i) {
-			log.warn("Interrupted while waiting on " + future);
-			future.cancel(true);
+			log.warn("Interrupted while waiting on " + future + ": cancelling it and the subsequent tasks");
+			future.cancel(false);
 			for(Future<SessionData> other : others) {
-				other.cancel(true);
+				other.cancel(false);
 			}
 			throw i;
+		} catch(CancellationException ce) {
+			log.info("Cancelled while attempting to get session data (" + future + ")");
 		} catch(java.util.concurrent.ExecutionException ee) {
 			log.warn("Exception while trying to get session data (" + future + ")", ee.getCause());
 		} catch(java.util.concurrent.TimeoutException te) {
 			log.warn("Timeout while trying to get session data (" + future + ")", te);
-			future.cancel(true);
-		} catch(java.util.concurrent.CancellationException ce) {
-			log.warn("Encountered a cancelled fetch of session data (" + future + ")");
-		}
+			future.cancel(false);
+		} 
 		return null;
 	}
 
@@ -184,20 +213,23 @@ public class ChainPersister implements Persister {
 
 			if(next != null) {
 				if(session == null) session = waitOnSessionData(next, nextNext);
-				next.cancel(true);
+				next.cancel(false);
 			}
 
 			if(nextNext != null) {
 				if(session == null) session = waitOnSessionData(nextNext);
-				nextNext.cancel(true);
+				nextNext.cancel(false);
 			}
 
 		} catch(InterruptedException punt) {
 			log.warn("Interrupted while getting session data: may not return data that is out there");
 		}
 
-
-		log.debug("Found session for session id " + sessionId + ": " + session);
+		if(session != null) {
+			log.debug("Found session in chain for session id " + sessionId + ": " + session);
+		} else {
+			log.debug("No session found in chain for session id " + sessionId);
+		}
 		return session;
 	}
 
@@ -207,28 +239,14 @@ public class ChainPersister implements Persister {
 	@Override
 	public void invalidate(final String sessionId) {
 		log.debug("Submitting invalidation call to persister chain for session " + sessionId);
-		List<Future<?>> futures = new ArrayList<Future<?>>(persisters.size());
 		for(final Persister p : persisters) {
-			futures.add(executor.submit(new Runnable() {
+			consumeFuture(executor.submit(new Runnable() {
 				public void run() {
 					log.debug("Submitting invalidation call for session " + sessionId + " to persister " + p);
 					p.invalidate(sessionId);
 				}
-			}));
+			}), "submitting invalidation call for session " + sessionId + " to persister " + p);
 		}
-		try {
-			for(Future<?> f : futures) {
-				try {
-					f.get(getSecondsToWait(), TimeUnit.SECONDS);
-				} catch(ExecutionException ee) {
-					log.error("Error while attempting to invalidate " + sessionId, ee.getCause());
-				} catch(TimeoutException te) {
-					log.warn("Timeout while attempting to invalidate " + sessionId, te);
-				}
-			}
-		} catch(InterruptedException punt) {
-			log.warn("Interrupted while invalidating sessions: a session may continue to exist");
-		} 
 	}
 
 	@Override

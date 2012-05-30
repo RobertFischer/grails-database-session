@@ -21,6 +21,8 @@ class DatabaseSessionGrailsPlugin {
 	def issueManagement = [system: 'JIRA', url: 'http://jira.grails.org/browse/GPDATABASESESSION']
 	def scm = [url: 'https://github.com/RobertFischer/grails-database-session']
 
+	def dependsOn = [ core: grailsVersion]
+
 	def getWebXmlFilterOrder() {
 		// make sure the filter is first
 		[sessionProxyFilter: -100]
@@ -58,18 +60,12 @@ class DatabaseSessionGrailsPlugin {
 			return
 		}
 
-		// do the check here instead of doWithWebDescriptor to get more obvious error display
-		if (Metadata.current.getApplicationName() && !manager.hasGrailsPlugin('webxml')) {
-			throw new IllegalStateException(
-				'The database-session plugin requires that the webxml plugin be installed')
-		}
-
 		sessionMemoryPersister(InMemoryPersister)
 
 		sessionJdbcMemoryPersister(JdbcPersister) {
 			transactionTemplate = { TransactionTemplate tmp ->
 				isolationLevelName = "ISOLATION_DEFAULT"
-				propagationBehaviorName = "PROPAGATION_NOT_SUPPORTED"
+				propagationBehaviorName = "PROPAGATION_NEVER"
 				transactionManager = ref("transactionManager")
 			}
 			jdbcTemplate = { JdbcTemplate tmp -> 

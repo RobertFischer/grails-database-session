@@ -84,22 +84,20 @@ public class JdbcPersister implements Persister, InitializingBean {
 		if(tableName == null) {
 			throw new IllegalStateException("tableName property must be assigned (cannot be null)");
 		}
+		log.debug("Transaction template configuration: " + 
+			transactionTemplate.getIsolationLevel() + " - " + transactionTemplate.getPropagationBehavior()
+		);
 		getMessageDigest(); // Make sure it works
 		createTable();
 	}
 
-	private static volatile int sessionHashSizeByte = 0;
-	private static volatile int sessionHashSizeChar = 0;
 	public void createTable() {
-		sessionHashSizeByte = getMessageDigest().getDigestLength();
-		sessionHashSizeChar = sessionHashSizeChar / 2;
-		
 		log.debug("Seeing if we are creating a table");
 		try {
 			jdbcTemplate.execute(
 				"CREATE TABLE " + getTableName() + " (\n" + 
 					"sessionId VARCHAR(255) NOT NULL PRIMARY KEY,\n" +
-					"sessionHash CHAR(" + sessionHashSizeChar + ") NOT NULL,\n" + 
+					"sessionHash CHAR(64) NOT NULL,\n" + 
 					"sessionData BLOB NOT NULL,\n" +
 					"createdAt TIMESTAMP NOT NULL,\n"+
 					"lastAccessedAt TIMESTAMP NOT NULL,\n"+
@@ -112,40 +110,33 @@ public class JdbcPersister implements Persister, InitializingBean {
 				"Looks like the table is already created (" + dae.getClass().getSimpleName() + ")"
 				+ "\n(If not, set the " + log.getName() + " logger to debug for the full stack trace.)"
 			);
-			log.debug("Exception encountered when attempting to create the table", dae);
-		} 
+			log.debug("Exception encountered when attempting to create the table", dae.getCause());
+		} catch(Exception e) {
+			log.warn("Unknown error while creating the table for sessions", e);
+		}
 	}
 
+	private static final String algorithm = "SHA-256";
 	private static MessageDigest getMessageDigest() {
 		try {
-			return MessageDigest.getInstance("SHA-256");
+			return MessageDigest.getInstance(algorithm);
 		} catch(java.security.NoSuchAlgorithmException nsae) {
-			throw new RuntimeException("Could not find SHA-256 on your virtual machine, even though it is required to be there!", nsae);	
+			throw new RuntimeException("Could not find " + algorithm + " on your virtual machine", nsae);	
 		}
 	}
 
 	private static final class SessionBytes {
 		public final SessionData session;
 		public final String hash;
-		public final InputStream byteStream;
+		public final byte[] bytes;
 
-		public SessionBytes(SessionData session, byte[] hash, InputStream byteStream) {
+		public SessionBytes(final SessionData session, final byte[] hashBytes, final byte[] dataBytes) {
 			this.session = session;
-			this.byteStream = byteStream;
+			this.bytes = dataBytes;
 
-			if(hash.length != sessionHashSizeByte) {
-				throw new IllegalStateException(
-					"Expected the hash to be " + sessionHashSizeByte + " bytes in length, but is " + hash.length
-				);
-			}
 			String hashStr = "";
-			for(byte b : hash) hashStr = hashStr + String.format("%02X", (int)b & 0xff);
+			for(byte b : hashBytes) hashStr = hashStr + String.format("%02X", (int)b & 0xff);
 			this.hash = hashStr;
-			if(this.hash.length() != sessionHashSizeChar) {
-				throw new IllegalStateException(
-					"Hash string is " + this.hash.length() + " characters long, but we expected " + sessionHashSizeChar
-				);
-			}
 		}
 	}
 
@@ -156,7 +147,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 			final ObjectOutputStream oos = new ObjectOutputStream(dos);
 			oos.writeObject(new HashMap<String,Serializable>(session.attrs));
 			oos.close();
-			return new SessionBytes(session, dos.getMessageDigest().digest(), new ByteArrayInputStream(baos.toByteArray()));
+			return new SessionBytes(session, dos.getMessageDigest().digest(), baos.toByteArray());
 		} catch(java.io.IOException ioe) {
 			throw new RuntimeException("IO Exception while converting the session to bytes: cannot serialize!", ioe);
 		}
@@ -165,16 +156,15 @@ public class JdbcPersister implements Persister, InitializingBean {
 	/**
 	* Persists a session to the data store. The sessionData may be {@code null}.
 	*/
+	@Override
 	public void persistSession(SessionData session) {
 		log.debug("Persisting session: " + session);
 		final SessionBytes data = sessionToBytes(session);
-		//if(isValid(session.sessionId)) {
+		if(isValid(session.sessionId)) {
 			insertSession(data);
-/*
 		} else {
 			updateSession(data);
 		}
-*/
 	}
 
 	private void insertSession(final SessionBytes data) {
@@ -182,7 +172,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 		
 		final List<Object> arguments = new ArrayList<Object>(6);
 		arguments.add(data.session.sessionId);
-		arguments.add(new SqlParameterValue(Types.BLOB, data.byteStream));
+		arguments.add(new SqlParameterValue(Types.BLOB, data.bytes));
 		arguments.add(data.hash);
 		arguments.add(data.session.maxInactiveInterval);
 		if("?".equals(timestamp)) {
@@ -205,7 +195,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 						log.debug("Successfully inserted session: " + data.session.sessionId);
 					} catch(DuplicateKeyException dke) {
 						// Someone else did an insert at the same time!
-						log.debug("Detected a duplicate key: " + data.session.sessionId);
+						log.debug("Detected a duplicate key: " + data.session.sessionId + " (going to try for an update)");
 						updateSession(data);
 					} catch(Exception e) {
 						log.error("Error persisting session: " + data.session.sessionId, e);
@@ -218,7 +208,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 
 	private void updateSession(final SessionBytes data) {
 		final List<Object> arguments = new ArrayList<Object>(6);
-		arguments.add(new SqlParameterValue(Types.BLOB, data.byteStream));
+		arguments.add(new SqlParameterValue(Types.BLOB, data.bytes));
 		arguments.add(data.hash);
 		arguments.add(new java.sql.Date(data.session.lastAccessedAt));
 		arguments.add(new java.sql.Date(data.session.maxInactiveInterval));
@@ -229,14 +219,19 @@ public class JdbcPersister implements Persister, InitializingBean {
 			new TransactionCallback<Void>() {
 				public Void doInTransaction(TransactionStatus status) {
 					try{ 
-						jdbcTemplate.update(
+						int updatedRecords = jdbcTemplate.update(
 							"UPDATE " + getTableName() + 
 								" SET sessionData = ?, sessionHash = ?, lastAccessedAt = ?, maxInactiveInterval = ? " + 
 								" WHERE sessionId = ? ", //AND sessionHash <> ?",
 							arguments.toArray(new Object[0])
 						);
 						status.flush();
-						log.debug("Successfully updated session: " + data.session.sessionId);
+						if(updatedRecords == 0) {
+							log.debug("Session was not updated, no records found: " + data.session.sessionId);
+							insertSession(data);
+						} else {
+							log.debug("Updated session: " + data.session.sessionId);
+						}
 					} catch(Exception e) {
 						log.error("Error updating session: " + data.session.sessionId, e);
 					}
@@ -262,19 +257,28 @@ public class JdbcPersister implements Persister, InitializingBean {
 								new RowMapper<SessionData>() {
 									public SessionData mapRow(ResultSet rs, int rowNum) throws SQLException {
 										log.debug("Processing session data row #" + rowNum + " for " + sessionId);
-										return new SessionData(
-											rs.getString(1),
-											readAttributes(rs.getBinaryStream(2)),
-											rs.getDate(3).getTime(),
-											rs.getDate(4).getTime(),
-											rs.getInt(5)
-										);
+										try {
+											return new SessionData(
+												rs.getString(1),
+												readAttributes(rs.getBytes(2)),
+												rs.getDate(3).getTime(),
+												rs.getDate(4).getTime(),
+												rs.getInt(5)
+											);
+										} catch(SQLException sqle) {
+											throw sqle;
+										} catch(RuntimeException re) {
+											log.error("Error processing row " + rowNum + " when fetching session data", re);
+											throw re;
+										} finally {
+											log.debug("Done processing session data row #" + rowNum + " for " + sessionId);
+										}
 									}
 								}
 							);
 						} catch(IncorrectResultSizeDataAccessException e) {
 							if(e.getActualSize() == 0) {
-								log.error("No database update occurred: no records in the database for  " + sessionId);
+								log.error("No database session data found: no records in the database for  " + sessionId);
 								return null;
 							}
 							log.error("More than one record with session id " + sessionId, e);
@@ -287,30 +291,33 @@ public class JdbcPersister implements Persister, InitializingBean {
 		});
 	}
 
-	private static Map<String,Serializable> readAttributes(InputStream is) {
-		if(is == null) {
-			log.warn("Asked to read from a null attributes stream");
+	private static Map<String,Serializable> readAttributes(byte[] bytes) {
+		if(bytes == null || bytes.length == 0) {
+			log.warn("Asked to read from a null/empty attributes stream: " + Arrays.toString(bytes));
 			return Collections.emptyMap();
 		}
 		try {
-			return (Map<String,Serializable>)(new ObjectInputStream(new BufferedInputStream(is)).readObject());
+			return (Map<String,Serializable>)(new ObjectInputStream(new ByteArrayInputStream(bytes)).readObject());
 		} catch(java.lang.ClassNotFoundException cnfe) {
 			throw new RuntimeException("Could not find the class to deserialize the session", cnfe);
 		} catch(java.io.IOException ioe) {
 			throw new RuntimeException("I/O Exception while reading session from database", ioe);
-		} finally {
-			IOUtils.closeQuietly(is);
-		}
+		} 
 	}
 
 	/**
 	 * Delete a session and its attributes.
 	 * @param sessionId the session id
 	 */
+	@Override
 	public void invalidate(String sessionId) {
 		log.debug("Deleting the session " + sessionId);
-		jdbcTemplate.update("DELETE " + getTableName() + " WHERE sessionId = ?", sessionId);
-		log.debug("Successfully deleted the session " + sessionId);
+		int rows = jdbcTemplate.update("DELETE " + getTableName() + " WHERE sessionId = ?", sessionId);
+		if(rows == 0) {
+			log.debug("No session with id " + sessionId + " found in the database to invalidate");	
+		} else {
+			log.debug("Successfully deleted the session " + sessionId);
+		}
 	}
 
 	/**
@@ -318,16 +325,10 @@ public class JdbcPersister implements Persister, InitializingBean {
 	 * @param sessionId the session id
 	 * @return true if the session exists and hasn't been invalidated
 	 */
+	@Override
 	public boolean isValid(String sessionId) {
 		return 1 == jdbcTemplate.queryForInt("SELECT COUNT(*) FROM " + getTableName() + " WHERE sessionId = ?", sessionId);
 	}
 
-  /**
-  * Provides the valid session ids that are stored within this persister.
-  */
-  public Iterator<String> getSessionIds() {
-		List<String> ids = jdbcTemplate.queryForList("SELECT sessionId FROM " + getTableName(), String.class, new Object[0]);
-		return ids.iterator();
-	}
 
 }

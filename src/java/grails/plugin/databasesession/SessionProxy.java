@@ -56,7 +56,6 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	 */
 	public SessionProxy(ServletContext servletContext, Persister persister, final String sessionId) {
 		this(servletContext, persister, sessionId, persister.getSessionData(sessionId));
-		log.debug("Constructed session for " + sessionId);
 	}
 
 	public SessionProxy(final ServletContext servletContext, final Persister persister, final String sessionId, final SessionData data) {
@@ -72,12 +71,13 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 			_lastAccessedAt = System.currentTimeMillis();
 			_maxInactiveInterval = 600;
 		} else {
-			log.debug("Using persisted session");
+			log.debug("Using persisted session for " + sessionId);
 			_attrs = new ConcurrentHashMap<String,Serializable>(data.attrs);
 			_createdAt = data.createdAt;
 			_lastAccessedAt = data.lastAccessedAt;
 			_maxInactiveInterval = data.maxInactiveInterval;
 		}
+		log.debug("Done constructing the proxy session for " + sessionId);
 	}
 
 	

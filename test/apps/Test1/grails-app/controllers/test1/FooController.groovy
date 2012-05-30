@@ -7,7 +7,7 @@ class FooController {
 	def grailsApplication
 
 	def index() { 
-		def serverName = grailsApplication.metadata['app.name']
+		def serverName = "${grailsApplication.metadata['app.name']} - ${request.serverPort} - ${request.getRequestURI()}"
 		def lastAt = session.lastAt
 		session.lastAt = serverName
 		return [
