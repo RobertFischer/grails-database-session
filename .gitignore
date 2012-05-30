@@ -5,3 +5,4 @@ target
 .settings
 web-app
 /docs
+db.*.db
