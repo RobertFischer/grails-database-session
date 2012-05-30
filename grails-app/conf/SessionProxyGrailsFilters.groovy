@@ -6,6 +6,8 @@ import grails.plugin.databasesession.*
 
 class SessionProxyGrailsFilters {
 
+	final String attributeName = "${this.class.name}.hash"
+
 	Persister sessionPersister
 
 	def filters = {
@@ -14,7 +16,7 @@ class SessionProxyGrailsFilters {
 				if(session == null) return;
 				log.debug("Storing state info for $session.id (${session.getClass().name})");
 				try {
-					request.setAttribute("GRAILS_DB_SESSION.hash", new SessionHash(session))
+					request.setAttribute(attributeName, new SessionHash(session))
 				} catch(IllegalStateException ise) {
 					log.debug("Ignoring session $session.id (${session.getClass().name}): it is invalid", ise)
 				}
@@ -25,7 +27,7 @@ class SessionProxyGrailsFilters {
 				log.debug("Persisting session for $session.id (${session.getClass().name})")
 	
 				try {
-					def hash = request.getAttribute("GRAILS_DB_SESSION.hash")
+					def hash = request.getAttribute(attributeName)
 					if(hash == null || hash != new SessionHash(session)) { // Only persist if there might have been a change
 						// Only persist if it A) was in the database, or B) the attributes aren't empty
 						if(sessionPersister.isValid(session.id) || !Collections.list(session.attributeNames).isEmpty()) {
