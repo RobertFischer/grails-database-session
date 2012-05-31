@@ -3,9 +3,10 @@ package grails.plugin.databasesession;
 import java.io.IOException;
 
 import java.util.UUID;
+import java.util.Collections;
 
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -73,8 +74,33 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 			};
 		}
 
+		stashSessionHash(requestForChain);
+
 		log.debug("Passing off to the next filter in the chain: " + requestForChain + " " + chain);
 		chain.doFilter(requestForChain, response);
+
+		SessionHash original = readStashedSessionHash(requestForChain);
+
+		try {
+			// Persist the session only if there looks like there was a change
+			if(original == null || !original.equals(new SessionHash(requestForChain.getSession()))) {
+				persister.persistSession(SessionData.fromSession(requestForChain.getSession()));
+			} else {
+				log.debug("Not persisting session because there doesn't seem to have been a change");
+			}
+		} catch(IllegalStateException ise) {
+			log.debug("Not persisting session because it seems to be invalid", ise);
+		} catch(Exception e) {
+			log.error("Unknown exception while persisting " + requestForChain.getSession().getId(), e);
+		}
+	}
+
+	protected void stashSessionHash(HttpServletRequest request) {
+		request.setAttribute(getClass().getName() + ".hash", new SessionHash(request.getSession()));
+	}
+
+	protected SessionHash readStashedSessionHash(HttpServletRequest request) {
+		return (SessionHash)request.getAttribute(getClass() + ".hash");
 	}
 
 	protected SessionProxy proxySession(final String sessionId, final HttpServletRequest request,

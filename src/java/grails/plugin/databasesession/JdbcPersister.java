@@ -161,9 +161,9 @@ public class JdbcPersister implements Persister, InitializingBean {
 		log.debug("Persisting session: " + session);
 		final SessionBytes data = sessionToBytes(session);
 		if(isValid(session.sessionId)) {
-			insertSession(data);
-		} else {
 			updateSession(data);
+		} else {
+			insertSession(data);
 		}
 	}
 
@@ -211,7 +211,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 		arguments.add(new SqlParameterValue(Types.BLOB, data.bytes));
 		arguments.add(data.hash);
 		arguments.add(new java.sql.Date(data.session.lastAccessedAt));
-		arguments.add(new java.sql.Date(data.session.maxInactiveInterval));
+		arguments.add(data.session.maxInactiveInterval);
 		arguments.add(data.session.sessionId);
 		//arguments.add(data.hash);
 

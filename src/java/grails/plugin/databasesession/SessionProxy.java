@@ -2,6 +2,7 @@ package grails.plugin.databasesession;
 
 import java.io.Serializable;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -71,7 +72,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 			_lastAccessedAt = System.currentTimeMillis();
 			_maxInactiveInterval = 600;
 		} else {
-			log.debug("Using persisted session for " + sessionId);
+			log.debug("Using persisted session for " + sessionId + ": " + Arrays.deepToString(data.attrs.keySet().toArray(new String[0])));
 			_attrs = new ConcurrentHashMap<String,Serializable>(data.attrs);
 			_createdAt = data.createdAt;
 			_lastAccessedAt = data.lastAccessedAt;
