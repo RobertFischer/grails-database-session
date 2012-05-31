@@ -16,6 +16,7 @@ class DatabaseSessionGrailsPlugin {
 	def developers = [ [ name: "Burt Beckwith", email: "beckwithb@vmware.com" ]]
 	String description = 'Stores HTTP sessions in a database'
 	String documentation = 'http://grails.org/plugin/database-session'
+	String group = "RobertFischer"
 
 	String license = 'APACHE'
 	def issueManagement = [system: 'JIRA', url: 'http://jira.grails.org/browse/GPDATABASESESSION']
