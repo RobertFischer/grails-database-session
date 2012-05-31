@@ -7,3 +7,4 @@ web-app
 /docs
 db.*.db
 *.zip.sha1
+.*.swp
