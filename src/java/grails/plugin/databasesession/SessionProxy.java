@@ -108,12 +108,12 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	public void checkAccess() { 
 		if(_invalidated) {
-			throw new IllegalStateException("Session " + _sessionId + " is invalid; cannot access/modify it.");
+			throw new InvalidatedSessionException("Session " + _sessionId + " is invalid; cannot access/modify it.");
 		}
 		final long lastAccess = _lastAccessedAt;
 		if(lastAccess + (_maxInactiveInterval*1000L) < System.currentTimeMillis()) {
 			invalidate();
-			throw new IllegalStateException(
+			throw new InvalidatedSessionException(
 				"Session " + _sessionId + " (last accessed at " + new java.sql.Date(lastAccess) + ") is invalid due to age"
 			);
 		}

@@ -2,11 +2,12 @@ package grails.plugin.databasesession
 
 /**
  * @author Burt Beckwith
+ * @author Robert Fischer
  */
 class DatabaseCleanupJob {
 
-	def databaseCleanupService
 	def grailsApplication
+	def sessionPersister
 
 	long timeout = 10 * 60 * 1000 // every 10 minutes
 
@@ -17,6 +18,6 @@ class DatabaseCleanupJob {
 			return
 		}
 
-		databaseCleanupService.cleanup()
+		sessionPersister.cleanUp()
 	}
 }

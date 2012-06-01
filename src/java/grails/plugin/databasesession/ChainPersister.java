@@ -110,4 +110,11 @@ public class ChainPersister implements Persister {
 		return false;
 	}
 
+	@Override
+	public void cleanUp() {
+		for(Persister p : persisters) {
+			p.cleanUp();
+		}
+	}
+
 }

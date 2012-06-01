@@ -2,10 +2,14 @@ package grails.plugin.databasesession;
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.sql.*;
 
 import java.security.MessageDigest;
 import java.security.DigestOutputStream;
+
+import com.google.common.base.Predicates;
+import com.google.common.collect.Collections2;
 
 import org.apache.commons.io.IOUtils;
 
@@ -312,7 +316,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 	@Override
 	public void invalidate(String sessionId) {
 		log.debug("Deleting the session " + sessionId);
-		int rows = jdbcTemplate.update("DELETE " + getTableName() + " WHERE sessionId = ?", sessionId);
+		int rows = jdbcTemplate.update("DELETE FROM " + getTableName() + " WHERE sessionId = ?", sessionId);
 		if(rows == 0) {
 			log.debug("No session with id " + sessionId + " found in the database to invalidate");	
 		} else {
@@ -328,6 +332,52 @@ public class JdbcPersister implements Persister, InitializingBean {
 	@Override
 	public boolean isValid(String sessionId) {
 		return 1 == jdbcTemplate.queryForInt("SELECT COUNT(*) FROM " + getTableName() + " WHERE sessionId = ?", sessionId);
+	}
+
+	@Override
+	public void cleanUp() {
+		// Date arithmetic is notoriously non-standard in SQL
+
+		final long now = System.currentTimeMillis();
+		final Object[][] toDelete = 
+			Collections2.filter(
+				jdbcTemplate.query(
+					"SELECT sessionId, lastAccessedAt, maxInactiveInterval FROM " + getTableName(),
+					new RowMapper<Object[]>() {
+						public Object[] mapRow(ResultSet rs, int rowNum) throws SQLException {
+							final String sessionId = rs.getString(1);
+							final java.sql.Date lastAccessed = rs.getDate(2);
+							final int maxInactiveSeconds = rs.getInt(3);
+							if(lastAccessed.getTime() + TimeUnit.SECONDS.toMillis(maxInactiveSeconds) < now) {
+								return new Object[] { sessionId, lastAccessed };
+							} else {
+								return null;
+							}
+						}
+					}
+				),
+				Predicates.notNull()
+			).toArray(new Object[0][0]);
+
+		if(toDelete.length == 0) return;
+
+		// Now do the big update: will automatically fall back to individual queries if need be
+		jdbcTemplate.batchUpdate(
+			// Check the lastAccessedAt to make sure we don't delete something which is suddenly used
+			"DELETE FROM " + getTableName() + " WHERE sessionId = ? AND lastAccessedAt = ?",
+			new BatchPreparedStatementSetter() {
+				public void setValues(PreparedStatement ps, int i) throws SQLException {
+					final Object[] args = toDelete[i];
+					ps.setString(1, (String)args[0]);
+					ps.setDate(2, (java.sql.Date)args[1]);
+				}
+		
+				public int getBatchSize() {
+					return toDelete.length;
+				}
+			}
+		);
+
 	}
 
 

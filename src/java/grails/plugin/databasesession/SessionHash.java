@@ -36,8 +36,7 @@ public class SessionHash extends ForwardingMap<String,Integer> {
 	public boolean equals(Object o) {
 		if(o instanceof HttpSession) return equals(new SessionHash((HttpSession)o));
 
-		boolean parent = super.equals(o);
-		return parent && 
+		return super.equals(o) && 
 			(o instanceof SessionHash) && 
 			this.maxInactiveInterval == ((SessionHash)o).maxInactiveInterval;
 	}

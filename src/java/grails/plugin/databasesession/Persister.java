@@ -39,4 +39,9 @@ public interface Persister {
 	 */
 	boolean isValid(String sessionId);
 
+	/** 
+	* Implements the clean up logic for the persister.
+	*/
+	void cleanUp();
+
 }

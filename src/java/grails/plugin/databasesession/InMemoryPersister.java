@@ -120,4 +120,10 @@ public class InMemoryPersister implements Persister, InitializingBean {
 	public boolean isValid(String sessionId) {
 		return getSessionData(sessionId) != null;
 	}
+
+	@Override
+	public void cleanUp() {
+		cache.cleanUp();
+	}
+
 }

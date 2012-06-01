@@ -70,7 +70,7 @@ class DatabaseSessionGrailsPlugin {
 				transactionManager = ref("transactionManager")
 			}
 			jdbcTemplate = { JdbcTemplate tmp -> 
-				dataSource = ref("dataSource")
+				dataSource = ref("dataSourceUnproxied")
 			}
 		}
 
