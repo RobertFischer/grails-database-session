@@ -83,6 +83,12 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 			final HttpSession session = requestForChain.getSession(false);
 			if(session == null) return;
 
+			if(session instanceof SessionProxy) {
+				// If it's not a SessionProxy, leave it to the wrapped session to deal with it
+				// TODO Or should we explicitly fire them all ourselves, in case someone needs to swap themselves for a Serializable representation?
+				((SessionProxy)session).fireSessionPassivationListeners();
+			}
+
 			// Persist the session only if there looks like there was a change
 			if(originalHash == null || !originalHash.equals(new SessionHash(session))) {
 				if(persister.isValid(session.getId()) || !Collections.list(session.getAttributeNames()).isEmpty()) {
@@ -103,7 +109,9 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 	protected SessionProxy proxySession(final String sessionId, final HttpServletRequest request,
 			final HttpServletResponse response) {
 		log.debug("Creating HttpSession proxy for request for {}", request.getRequestURL());
-		return new SessionProxy(getServletContext(), persister, sessionId);
+		SessionProxy proxy = new SessionProxy(getServletContext(), persister, sessionId);
+		proxy.fireSessionActivationListeners();
+		return proxy;
 	}
 
 

@@ -42,7 +42,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	private final ServletContext _servletContext;
 	private final Map<String,Serializable> _attrs;
 	private final long _createdAt;
-	private final HttpSessionEvent event = new HttpSessionEvent(this); // Might as well cache this
+	private final HttpSessionEvent _event = new HttpSessionEvent(this); // Might as well cache this
 	private volatile long _lastAccessedAt;
 	private volatile boolean _invalidated;
 	private volatile int _maxInactiveInterval;
@@ -93,7 +93,8 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	public void fireSessionActivationListeners() {
 		for(Serializable value : _attrs.values()) {
 			if(value instanceof HttpSessionActivationListener) {
-				((HttpSessionActivationListener)value).sessionDidActivate(event);
+				log.debug("Firing sessionActivation for " + value);
+				((HttpSessionActivationListener)value).sessionDidActivate(_event);
 			}
 		}
 	}
@@ -101,7 +102,8 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	public void fireSessionPassivationListeners() {
 		for(Serializable value : _attrs.values()) {
 			if(value instanceof HttpSessionActivationListener) {
-				((HttpSessionActivationListener)value).sessionWillPassivate(event);
+				log.debug("Firing sessionPassivation for " + value);
+				((HttpSessionActivationListener)value).sessionWillPassivate(_event);
 			}
 		}
 	}
@@ -157,11 +159,13 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 				throw new IllegalStateException("Can only set Serializable values into the session (tried to add: " + value.getClass() + ")");
 			}
 			if(oldValue != null && oldValue instanceof HttpSessionBindingListener) {
+				log.debug("Firing off valueUnbound listener for " + oldValue + " (was attached to '" + name + "')");
 				((HttpSessionBindingListener)oldValue).valueUnbound(
 					new HttpSessionBindingEvent(this, name, oldValue)
 				);
 			}
 			if(value instanceof HttpSessionBindingListener) {
+				log.debug("Firing off valueBound listener for " + value + " (now attached to '" + name + "')");
 				((HttpSessionBindingListener)value).valueBound(
 					new HttpSessionBindingEvent(this, name, value)
 				);
@@ -179,6 +183,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 		checkAccess();
 		Serializable value = _attrs.remove(name);
 		if(value != null && value instanceof HttpSessionBindingListener) {
+			log.debug("Firing off valueUnbound listener for " + value + " (was attached to '" + name + "')");
 			((HttpSessionBindingListener)value).valueUnbound(
 				new HttpSessionBindingEvent(this, name, value)
 			);

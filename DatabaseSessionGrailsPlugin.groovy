@@ -6,6 +6,7 @@ import org.springframework.web.filter.DelegatingFilterProxy
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.transaction.support.TransactionTemplate
 
+import org.apache.commons.dbcp.BasicDataSource
 
 class DatabaseSessionGrailsPlugin {
 	String version = '1.2.0'
@@ -68,7 +69,17 @@ class DatabaseSessionGrailsPlugin {
 				transactionManager = ref("transactionManager")
 			}
 			jdbcTemplate = { JdbcTemplate tmp -> 
-				dataSource = ref("dataSourceUnproxied")
+				def dbConfig = tryToFindDbConfig(application.config)
+				if(dbConfig) {
+					dataSource = { BasicDataSource ds ->
+						if(dbConfig.driverClassName) driverClassName = dbConfig.driverClassName
+						if(dbConfig.url) url = dbConfig.url
+						if(dbConfig.username) username = dbConfig.username
+						if(dbConfig.password) password = dbConfig.password
+					}
+				} else {
+					dataSource = ref("dataSourceUnproxied")
+				}
 			}
 		}
 
@@ -84,7 +95,13 @@ class DatabaseSessionGrailsPlugin {
 	def doWithApplicationContext = { appCtx ->
 	}
 
-	private boolean isEnabled(config) {
+	private static def tryToFindDbConfig(config) {
+		def dbConfig = config.grails.plugin.databasesession.dbConfig
+		if(dbConfig.url instanceof String) return dbConfig
+		return null
+	}
+
+	private static boolean isEnabled(config) {
 		def enabled = config.grails.plugin.databasesession.enabled
 		if (enabled instanceof Boolean) {
 			return enabled

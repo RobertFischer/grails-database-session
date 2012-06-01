@@ -58,7 +58,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 		return tableName;
 	}
 
-	public volatile String nowFunc = "?";
+	private volatile String nowFunc = "?";
 	public String getCurrentTimestampDbFunction() {
 		return nowFunc;
 	}
@@ -67,6 +67,19 @@ public class JdbcPersister implements Persister, InitializingBean {
 			nowFunc = "?";
 		} else {
 			nowFunc = functionCall;
+		}
+	}
+
+	// TODO We should be able to look this up somehow based on the BLOB type.
+	private volatile String binaryType = "BLOB";
+	public String getBinaryType() {
+		return binaryType;
+	}
+	public void setBinaryType(String binaryTypeName) {
+		if(binaryTypeName == null) {
+			this.binaryType = "BLOB";
+		} else {
+			this.binaryType = binaryTypeName;
 		}
 	}
 
@@ -94,7 +107,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 				"CREATE TABLE " + getTableName() + " (\n" + 
 					"sessionId VARCHAR(255) NOT NULL PRIMARY KEY,\n" +
 					"sessionHash CHAR(64) NOT NULL,\n" + 
-					"sessionData BLOB NOT NULL,\n" +
+					"sessionData " + getBinaryType() + " NOT NULL,\n" +
 					"createdAt TIMESTAMP NOT NULL,\n"+
 					"lastAccessedAt TIMESTAMP NOT NULL,\n"+
 					"maxInactiveInterval INT NOT NULL\n"
@@ -328,6 +341,8 @@ public class JdbcPersister implements Persister, InitializingBean {
 
 	@Override
 	public void cleanUp() {
+		log.info("Executing database session cleanUp");
+
 		// Date arithmetic is notoriously non-standard in SQL
 
 		final long now = System.currentTimeMillis();

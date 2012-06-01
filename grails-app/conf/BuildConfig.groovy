@@ -14,6 +14,7 @@ grails.project.dependency.resolution = {
 	}
 	dependencies {
 		compile 'com.google.guava:guava:12.0'
+		//compile 'c3p0:c3p0:9.1.2'
 		//compile 'commons-io:commons-io:2.3'
 	}
 
