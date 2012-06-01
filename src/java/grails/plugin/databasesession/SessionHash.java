@@ -30,13 +30,13 @@ public class SessionHash extends ForwardingMap<String,Integer> {
 	}
 
 	public int hashCode() {
-		return this.maxInactiveInterval ^ super.hashCode();
+		return this.maxInactiveInterval ^ standardHashCode();
 	}
 
 	public boolean equals(Object o) {
 		if(o instanceof HttpSession) return equals(new SessionHash((HttpSession)o));
 
-		return super.equals(o) && 
+		return standardEquals(o) && 
 			(o instanceof SessionHash) && 
 			this.maxInactiveInterval == ((SessionHash)o).maxInactiveInterval;
 	}

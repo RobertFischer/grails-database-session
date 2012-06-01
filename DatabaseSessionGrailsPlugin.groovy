@@ -34,9 +34,7 @@ class DatabaseSessionGrailsPlugin {
 			return
 		}
 
-		// add the filter after the last context-param
 		def contextParam = xml.'context-param'
-
 		contextParam[contextParam.size() - 1] + {
 			'filter' {
 				'filter-name'('sessionProxyFilter')

@@ -70,14 +70,6 @@ public class JdbcPersister implements Persister, InitializingBean {
 		}
 	}
 
-	private volatile int defaultMaxInactiveInterval = 600;
-	public void setDefaultMaxInactiveInterval(int newDefault) {
-		this.defaultMaxInactiveInterval = newDefault;
-	}
-	public int getDefaultMaxInactiveInterval() {
-		return defaultMaxInactiveInterval;
-	}
-
 	public void afterPropertiesSet() {
 		if(jdbcTemplate == null) {
 			throw new IllegalStateException("jdbcTemplate property must be assigned (cannot be null)");

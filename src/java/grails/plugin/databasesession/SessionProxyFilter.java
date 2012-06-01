@@ -74,17 +74,22 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 			};
 		}
 
-		stashSessionHash(requestForChain);
+		final SessionHash originalHash = request.getSession(false) == null ? null : new SessionHash(request.getSession());
 
 		log.debug("Passing off to the next filter in the chain: " + requestForChain + " " + chain);
 		chain.doFilter(requestForChain, response);
 
-		SessionHash original = readStashedSessionHash(requestForChain);
-
 		try {
+			final HttpSession session = requestForChain.getSession(false);
+			if(session == null) return;
+
 			// Persist the session only if there looks like there was a change
-			if(original == null || !original.equals(new SessionHash(requestForChain.getSession()))) {
-				persister.persistSession(SessionData.fromSession(requestForChain.getSession()));
+			if(originalHash == null || !originalHash.equals(new SessionHash(session))) {
+				if(persister.isValid(session.getId()) || !Collections.list(session.getAttributeNames()).isEmpty()) {
+					persister.persistSession(SessionData.fromSession(session));
+				} else {
+					log.debug("Not persisting session because the session is empty");
+				}
 			} else {
 				log.debug("Not persisting session because there doesn't seem to have been a change");
 			}
@@ -93,14 +98,6 @@ public class SessionProxyFilter extends OncePerRequestFilter {
 		} catch(Exception e) {
 			log.error("Unknown exception while persisting " + requestForChain.getSession().getId(), e);
 		}
-	}
-
-	protected void stashSessionHash(HttpServletRequest request) {
-		request.setAttribute(getClass().getName() + ".hash", new SessionHash(request.getSession()));
-	}
-
-	protected SessionHash readStashedSessionHash(HttpServletRequest request) {
-		return (SessionHash)request.getAttribute(getClass() + ".hash");
 	}
 
 	protected SessionProxy proxySession(final String sessionId, final HttpServletRequest request,

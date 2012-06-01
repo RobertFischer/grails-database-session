@@ -19,28 +19,27 @@ public interface Persister {
 	void persistSession(SessionData session);
 
 	/**
-	* Retrieves the session data for the given session. Will never be {@code null}, but may be empty. Note that an empty map
-	* may reflect an invalid session: check {@link #isValid(String)} for that.
+	* Retrieves the session data for the given session. Return value will be {@code null} if the session id is not recognized.
 	*/
 	SessionData getSessionData(String sessionId);
 
 	/**
-	 * Delete a session and its attributes. 
+	 * Effectively delete a session.
    * 
 	 * @param sessionId the session id
 	 */
 	void invalidate(String sessionId);
 
 	/**
-	 * Check if the session is valid.
-		* 
+	 * Check if the persister is aware of a session with that id and it is not invalidated.
+	 * 
 	 * @param sessionId the session id
 	 * @return true if the session exists and hasn't been invalidated
 	 */
 	boolean isValid(String sessionId);
 
 	/** 
-	* Implements the clean up logic for the persister.
+	* Implements any clean up logic for the persister.
 	*/
 	void cleanUp();
 
