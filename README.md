@@ -10,6 +10,14 @@ This plugin is based on the [canonical version by Burt Beckwith](http://grails.o
 rewritten. A more extensive discussion of this plugin (including a tour under the hood) can be found in 
 [the June 2012 GroovyMag](http://www.groovymag.com/main.issues.description/id=46/).
 
+Usage
+-----
+
+To use this plugin, simply add it to your `BuildConfig.groovy`.
+
+First, add `mavenRepo 'http://repo.smokejumperit.com'` into the repositories. Then add `compile 'RobertFischer:database-session:1.2.0'` into the
+section for plugins. Done and done!
+
 Configuration
 ---------------
 
@@ -27,7 +35,9 @@ property. The four values you can set are:
 Spring Bean Configuration
 --------------------------
 
-The Persistence mechanism used is specified by the `sessionPersister` Spring Bean, which is expected to be of type `Persister`. If you want to
+The Persistence mechanism used is specified by the `sessionPersister` Spring Bean, which is expected to be of type 
+[`Persister`](https://github.com/RobertFischer/grails-database-session/blob/master/src/java/grails/plugin/databasesession/Persister.java). 
+If you want to
 override the persistence behavior, simply overwrite that bean in `resources.groovy`: 
 
 ```groovy
