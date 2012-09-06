@@ -15,7 +15,7 @@ Usage
 
 To use this plugin, simply add it to your `BuildConfig.groovy`.
 
-First, add `mavenRepo 'http://repo.smokejumperit.com'` into the repositories. Then add `compile 'RobertFischer:database-session:1.2.0'` into the
+First, add `mavenRepo 'http://repo.smokejumperit.com'` into the repositories. Then add `compile 'RobertFischer:database-session:1.2.1'` into the
 section for plugins. Done and done!
 
 Configuration
