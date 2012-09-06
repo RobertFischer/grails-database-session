@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 
 
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.servlet.ServletContext;
@@ -28,6 +29,8 @@ import com.google.common.collect.Iterators;
 
 import org.apache.log4j.Logger;
 
+import org.codehaus.groovy.grails.commons.ConfigurationHolder;
+
 /**
  * @author Burt Beckwith
  * @author Robert Fischer
@@ -40,7 +43,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	private final Persister _persister;
 	private final String _sessionId;
 	private final ServletContext _servletContext;
-	private final Map<String,Serializable> _attrs;
+	private final ConcurrentMap<String,Serializable> _attrs;
 	private final long _createdAt;
 	private final HttpSessionEvent _event = new HttpSessionEvent(this); // Might as well cache this
 	private volatile long _lastAccessedAt;
@@ -108,9 +111,23 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 		}
 	}
 
-	public void checkAccess() { 
+	private static boolean trueish(Object value) {
+		if(value == null) return false;
+		if(value instanceof Boolean) return ((Boolean)value).booleanValue();
+		if(value instanceof Number) return ((Number)value).longValue() != 0L;
+		return Boolean.valueOf(value.toString().toLowerCase());
+	}
+
+	public static final String CONFIG_IGNORE_INVALID_PREFIX = "grails.plugin.databasesession.ignoreinvalid";
+	public void checkAccess(final String methodName) { 
 		if(_invalidated) {
-			throw new InvalidatedSessionException("Session " + _sessionId + " is invalid; cannot access/modify it.");
+			final Map config = ConfigurationHolder.getFlatConfig();
+			if(!(
+				trueish(config.get(CONFIG_IGNORE_INVALID_PREFIX + '.' + methodName)) || 
+				trueish(config.get(CONFIG_IGNORE_INVALID_PREFIX))
+			)) {
+				throw new InvalidatedSessionException("Session " + _sessionId + " is invalid; cannot access/modify it.");
+			} 
 		}
 		final long lastAccess = _lastAccessedAt;
 		if(lastAccess + (_maxInactiveInterval*1000L) < System.currentTimeMillis()) {
@@ -124,7 +141,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	@Override
 	public Serializable getAttribute(String name) {
-		checkAccess();
+		checkAccess("getAttribute");
 		return _attrs.get(name);
 	}
 
@@ -135,19 +152,19 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	@Override
 	public Enumeration<String> getAttributeNames() {
-		checkAccess();
+		checkAccess("getAttributeNames");
 		return Collections.enumeration(_attrs.keySet());
 	}
 
 	@Override @Deprecated
 	public String[] getValueNames() {
-		checkAccess();
+		checkAccess("getValueNames");
 		return _attrs.keySet().toArray(new String[0]);
 	}
 
 	@Override
 	public void setAttribute(String name, Object value) {
-		checkAccess();
+		checkAccess("setAttribute");
 		if(name == null) throw new IllegalArgumentException("Cannot store a null key into the session");
 		if(value == null) {
 			removeAttribute(name);
@@ -180,7 +197,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	@Override
 	public void removeAttribute(String name) {
-		checkAccess();
+		checkAccess("removeAttribute");
 		Serializable value = _attrs.remove(name);
 		if(value != null && value instanceof HttpSessionBindingListener) {
 			log.debug("Firing off valueUnbound listener for " + value + " (was attached to '" + name + "')");
@@ -198,7 +215,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	@Override
 	public long getCreationTime() {
-		checkAccess();
+		checkAccess("getCreationTime");
 		return _createdAt;
 	}
 
@@ -209,7 +226,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	@Override
 	public long getLastAccessedTime() {
-		checkAccess();
+		checkAccess("getLastAccessedTime");
 		return _lastAccessedAt;
 	}
 
@@ -246,7 +263,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	@Override
 	public void invalidate() {
-		checkAccess();
+		checkAccess("invalidate");
 		_invalidated = true;
 		// A race condition *could* result in a session being invalidated twice, but that's OK
 		_persister.invalidate(_sessionId); 
@@ -257,7 +274,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	*/	
 	@Override
 	public boolean isNew() {
-		checkAccess();
+		checkAccess("isNew");
 		return false;
 	}
 

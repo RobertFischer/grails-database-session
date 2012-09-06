@@ -32,6 +32,14 @@ property. The four values you can set are:
 * *username*: The username for the connection (optional)
 * *password*: The password for the connection (optional)
 
+The spec for Session requires that invalidated sessions should throw exceptions if you so much as look at them. 
+If you have some kind of buggy library that depends non-conforming behavior of the Session implementation _\*coughSpringSecuritycough\*_, 
+you can disable the invalidated session check by setting the `config.grails.plugin.databasesession.ignoreinvalid` property. If you want to
+set it for a particular Session method, you can set a child of that property. So, to ignore the invalid state of the session for calls to 
+the `foo` method, you would set the `config.grails.plugin.databasesession.ignoreinvalid.foo` configuration property in your application.
+The value for this property should be true-ish. Your best best is the boolean `true`, but there is some flexibility for other popular 
+variations on true.
+
 Spring Bean Configuration
 --------------------------
 

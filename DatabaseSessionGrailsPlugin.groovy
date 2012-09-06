@@ -9,7 +9,7 @@ import org.springframework.transaction.support.TransactionTemplate
 import org.apache.commons.dbcp.BasicDataSource
 
 class DatabaseSessionGrailsPlugin {
-	String version = '1.2.0'
+	String version = '1.2.1'
 	String grailsVersion = '2.0.0 > *'
 	String title = 'Database Session Plugin'
 	String author = 'Robert Fischer'
