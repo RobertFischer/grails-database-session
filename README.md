@@ -22,10 +22,10 @@ Configuration
 ---------------
 
 By default, the plugin is enabled in non-development environments. If you would like to change that behavior, simply set the configuration
-value of `config.grails.plugin.databasesession.enabled` to boolean `true` (Groovy-truth is insufficient) and the plugin will be enabled; set it
+value of `grails.plugin.databasesession.enabled` to boolean `true` (Groovy-truth is insufficient) and the plugin will be enabled; set it
 to boolean `false` (Groovy-false is insufficient) and the plugin will be disabled. 
 
-If you want to use a different SQL data source, the easiest way is to set the children of the `config.grails.plugin.databasesession.dbConfig` 
+If you want to use a different SQL data source, the easiest way is to set the children of the `grails.plugin.databasesession.dbConfig` 
 property. The four values you can set are:
 * *url*: The connection string (required)
 * *driverClassName*: The class name of the driver (required if the DriverManager cannot inferred it from the url)
@@ -34,9 +34,9 @@ property. The four values you can set are:
 
 The spec for Session requires that invalidated sessions should throw exceptions if you so much as look at them. 
 If you have some kind of buggy library that depends non-conforming behavior of the Session implementation _\*coughSpringSecuritycough\*_, 
-you can disable the invalidated session check by setting the `config.grails.plugin.databasesession.ignoreinvalid` property. If you want to
+you can disable the invalidated session check by setting the `grails.plugin.databasesession.ignoreinvalid` property. If you want to
 set it for a particular Session method, you can set a child of that property. So, to ignore the invalid state of the session for calls to 
-the `foo` method, you would set the `config.grails.plugin.databasesession.ignoreinvalid.foo` configuration property in your application.
+the `foo` method, you would set the `grails.plugin.databasesession.ignoreinvalid.foo` configuration property in your application.
 The value for this property should be true-ish. Your best best is the boolean `true`, but there is some flexibility for other popular 
 variations on true.
 
