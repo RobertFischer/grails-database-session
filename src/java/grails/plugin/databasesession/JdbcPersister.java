@@ -72,6 +72,16 @@ public class JdbcPersister implements Persister, InitializingBean {
 
 	// TODO We should be able to look this up somehow based on the BLOB type.
 	private volatile String binaryType = "BLOB";
+    private volatile int sqlBinaryType = Types.BLOB;
+
+    public int getSqlBinaryType() {
+        return sqlBinaryType;
+    }
+
+    public void setSqlBinaryType(int sqlBinaryType) {
+        this.sqlBinaryType = sqlBinaryType;
+    }
+
 	public String getBinaryType() {
 		return binaryType;
 	}
@@ -181,7 +191,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 		
 		final List<Object> arguments = new ArrayList<Object>(6);
 		arguments.add(data.session.sessionId);
-		arguments.add(new SqlParameterValue(Types.BLOB, data.bytes));
+		arguments.add(new SqlParameterValue(getSqlBinaryType() data.bytes));
 		arguments.add(data.hash);
 		arguments.add(data.session.maxInactiveInterval);
 		if("?".equals(timestamp)) {
@@ -217,7 +227,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 
 	private void updateSession(final SessionBytes data) {
 		final List<Object> arguments = new ArrayList<Object>(6);
-		arguments.add(new SqlParameterValue(Types.BLOB, data.bytes));
+		arguments.add(new SqlParameterValue(getSqlBinaryType(), data.bytes));
 		arguments.add(data.hash);
 		arguments.add(new java.sql.Date(data.session.lastAccessedAt));
 		arguments.add(data.session.maxInactiveInterval);
