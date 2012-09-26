@@ -191,7 +191,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 		
 		final List<Object> arguments = new ArrayList<Object>(6);
 		arguments.add(data.session.sessionId);
-		arguments.add(new SqlParameterValue(getSqlBinaryType() data.bytes));
+		arguments.add(new SqlParameterValue(getSqlBinaryType(), data.bytes));
 		arguments.add(data.hash);
 		arguments.add(data.session.maxInactiveInterval);
 		if("?".equals(timestamp)) {
