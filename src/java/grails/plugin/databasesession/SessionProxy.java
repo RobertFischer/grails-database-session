@@ -268,7 +268,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	@Override
 	public void invalidate() {
-		checkAccess("invalidate");
+		//checkAccess("invalidate");
 		_invalidated = true;
 		// A race condition *could* result in a session being invalidated twice, but that's OK
 		_persister.invalidate(_sessionId); 
