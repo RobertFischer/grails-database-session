@@ -114,7 +114,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 		log.debug("Seeing if we are creating a table");
 		try {
 			jdbcTemplate.execute(
-				"CREATE TABLE " + getTableName() + " (\n" + 
+				"CREATE TABLE IF NOT EXISTS " + getTableName() + " (\n" +
 					"sessionId VARCHAR(255) NOT NULL PRIMARY KEY,\n" +
 					"sessionHash CHAR(64) NOT NULL,\n" + 
 					"sessionData " + getBinaryType() + " NOT NULL,\n" +
@@ -123,13 +123,7 @@ public class JdbcPersister implements Persister, InitializingBean {
 					"maxInactiveInterval INT NOT NULL\n"
 				+")"
 			);
-			log.info("Successfully created the table for sessions: " + getTableName());
-		} catch(DataAccessException dae) {
-			log.info(
-				"Looks like the table is already created (" + dae.getClass().getSimpleName() + ")"
-				+ "\n(If not, set the " + log.getName() + " logger to debug for the full stack trace.)"
-			);
-			log.debug("Exception encountered when attempting to create the table", dae.getCause());
+			log.info("If not already present, created the table for sessions: " + getTableName());
 		} catch(Exception e) {
 			log.warn("Unknown error while creating the table for sessions", e);
 		}
