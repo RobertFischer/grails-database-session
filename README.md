@@ -56,7 +56,9 @@ beans = {
 
 If you want to see what other beans are available to be overwritten, take a look at [`doWithSpring`](https://github.com/RobertFischer/grails-database-session/blob/master/DatabaseSessionGrailsPlugin.groovy#L58).
 
-Example resources.groovy override that works with PostGres:
+For those of you deploying to Heroku using PostGres, you will want to use a resources.groovy similar to what is below.
+It sets the session column data type to 'byte' and SQL binary type to Types.BINARY.  Also, it's important to remove the
+'sessionMemoryPersister' as this persister does not appear to work when running more than one dyno.
 
 ```groovy
 import grails.plugin.databasesession.JdbcPersister
@@ -89,6 +91,10 @@ beans = {
         }
         binaryType = 'bytea'
         sqlBinaryType = Types.BINARY
+    }
+
+    sessionPersister(ChainPersister) {
+         persisters = [ref("sessionJdbcMemoryPersister")]
     }
 
 }
