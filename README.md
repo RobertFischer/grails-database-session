@@ -55,3 +55,53 @@ beans = {
 ```
 
 If you want to see what other beans are available to be overwritten, take a look at [`doWithSpring`](https://github.com/RobertFischer/grails-database-session/blob/master/DatabaseSessionGrailsPlugin.groovy#L58).
+
+For those of you deploying to Heroku using PostGres, you will want to use a resources.groovy similar to what is below.
+It sets the session column data type to 'bytea' and SQL binary type to Types.BINARY.  Also, it's important to remove the
+'sessionMemoryPersister' as this persister does not appear to work when running more than one dyno.
+
+```groovy
+import grails.plugin.databasesession.JdbcPersister
+import org.springframework.transaction.support.TransactionTemplate
+import org.springframework.jdbc.core.JdbcTemplate
+import org.apache.commons.dbcp.BasicDataSource
+import java.sql.Types
+
+// Place your Spring DSL code here
+beans = {
+
+    sessionJdbcMemoryPersister(JdbcPersister) {
+        transactionTemplate = { TransactionTemplate tmp ->
+            isolationLevelName = "ISOLATION_DEFAULT"
+            propagationBehaviorName = "PROPAGATION_NEVER"
+            transactionManager = ref("transactionManager")
+        }
+        jdbcTemplate = { JdbcTemplate tmp ->
+            def dbConfig = tryToFindDbConfig(application.config)
+            if (dbConfig) {
+                dataSource = { BasicDataSource ds ->
+                    if (dbConfig.driverClassName) driverClassName = dbConfig.driverClassName
+                    if (dbConfig.url) url = dbConfig.url
+                    if (dbConfig.username) username = dbConfig.username
+                    if (dbConfig.password) password = dbConfig.password
+                }
+            } else {
+                dataSource = ref("dataSourceUnproxied")
+            }
+        }
+        binaryType = 'bytea'
+        sqlBinaryType = Types.BINARY
+    }
+
+    sessionPersister(ChainPersister) {
+         persisters = [ref("sessionJdbcMemoryPersister")]
+    }
+
+}
+
+private static def tryToFindDbConfig(config) {
+    def dbConfig = config.grails.plugin.databasesession.dbConfig
+    if (dbConfig.url instanceof String) return dbConfig
+    return null
+}
+```

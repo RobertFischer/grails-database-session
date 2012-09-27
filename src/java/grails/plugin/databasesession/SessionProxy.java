@@ -119,9 +119,9 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 	}
 
 	public static final String CONFIG_IGNORE_INVALID_PREFIX = "grails.plugin.databasesession.ignoreinvalid";
-	public void checkAccess(final String methodName) { 
+	public void checkAccess(final String methodName) {
+        final Map config = ConfigurationHolder.getFlatConfig();
 		if(_invalidated) {
-			final Map config = ConfigurationHolder.getFlatConfig();
 			if(!(
 				trueish(config.get(CONFIG_IGNORE_INVALID_PREFIX + '.' + methodName)) || 
 				trueish(config.get(CONFIG_IGNORE_INVALID_PREFIX))
@@ -132,9 +132,14 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 		final long lastAccess = _lastAccessedAt;
 		if(lastAccess + (_maxInactiveInterval*1000L) < System.currentTimeMillis()) {
 			invalidate();
-			throw new InvalidatedSessionException(
-				"Session " + _sessionId + " (last accessed at " + new java.sql.Date(lastAccess) + ") is invalid due to age"
-			);
+            if(!(
+            		trueish(config.get(CONFIG_IGNORE_INVALID_PREFIX + '.' + methodName)) ||
+            		trueish(config.get(CONFIG_IGNORE_INVALID_PREFIX))
+            )) {
+                throw new InvalidatedSessionException(
+                    "Session " + _sessionId + " (last accessed at " + new java.sql.Date(lastAccess) + ") is invalid due to age"
+                );
+            }
 		}
 		_lastAccessedAt = System.currentTimeMillis();
 	}
@@ -263,7 +268,7 @@ public class SessionProxy implements HttpSession,Serializable,Cloneable {
 
 	@Override
 	public void invalidate() {
-		checkAccess("invalidate");
+		//checkAccess("invalidate");
 		_invalidated = true;
 		// A race condition *could* result in a session being invalidated twice, but that's OK
 		_persister.invalidate(_sessionId); 
