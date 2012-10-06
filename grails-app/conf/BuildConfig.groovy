@@ -3,12 +3,15 @@ grails.project.docs.output.dir = 'docs/manual' // for backwards-compatibility, t
 
 grails.project.dependency.resolution = {
 
+	defaultDependenciesProvided true
+
 	inherits 'global'
 	log 'warn'
 
 	repositories {
 		mavenLocal()
 		mavenCentral()
+		grailsHome()
 		grailsCentral()
 		ebr()
 	}
