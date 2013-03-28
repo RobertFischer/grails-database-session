@@ -62,6 +62,7 @@ It sets the session column data type to 'bytea' and SQL binary type to Types.BIN
 
 ```groovy
 import grails.plugin.databasesession.JdbcPersister
+import grails.plugin.databasesession.ChainPersister
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.apache.commons.dbcp.BasicDataSource
